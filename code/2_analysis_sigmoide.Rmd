@@ -1,0 +1,1584 @@
+---
+title: "A 26-year time series of mortality and growth of the Pacific oyster C. gigas recorded along French coasts"
+subtitle: "Article submitted in Scientific data"
+author: "This code was written by Anna Mazaleyrat, Laurent Dubroca and Julien Normand"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::downcute:
+    self_contained: yes
+    code_folding: hide
+    thumbnails: false
+    lightbox: true
+    number_section: yes
+    toc_depth: 3
+editor_options: 
+  chunk_output_type: console
+  wrap: 120
+  markdown: 
+    wrap: 120
+---
+
+```{=html}
+<style>
+#toc ul.nav li ul li {
+    display: none;
+    max-height: none;
+}
+
+#toc ul.nav li.active ul li  {
+    display: block;
+    max-height: none;
+}
+
+#toc ul.nav li ul li ul li {
+    max-height: none;
+    display: none !important;
+}
+
+#toc ul.nav li ul li.active ul li {
+    max-height: none;
+    display: block !important;
+}
+</style>
+```
+```{r message=FALSE, warning=FALSE}
+rm(list = ls())
+library(nls.multstart)
+library(broom)
+library(purrr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggpubr)
+library(reshape2)
+library(viridis)
+library(DT)
+library(formattable)
+library(here)
+
+theme_graphic <- function(base_family = "sans", ...) {
+  theme_bw(base_family = base_family, ...) +
+    theme(
+      panel.grid = element_blank(),
+      legend.background = element_rect(color = NA, fill = NA),
+      strip.text = element_text(size = 11),
+      axis.title = element_text(size = 12),
+      plot.margin = margin(0, 0.1, 0.1, 0, "cm"),
+      legend.text = element_text(size = 11),
+      legend.title = element_text(size = 12),
+      legend.key.height = unit(0.5, "cm"),
+      legend.key.width = unit(0.5, "cm")
+    )
+}
+
+operationnel <- TRUE
+knitr::opts_chunk$set(
+  warning = !operationnel,
+  message = !operationnel,
+  fig.width = 12,
+  progress = !operationnel,
+  verbose = !operationnel
+)
+```
+
+The aim of the article was to model growth and cumulative mortality of spat and half-grown oysters as a function of
+time, to cope with changes in data acquisition frequency, and produce standardized growth and cumulative mortality
+indicators to improve data usability. To do so we relied on the nls.multstrat package:
+
+> nls_multstart() is the main (currently only) function of nls.multstart. Similar to the R package nls2, it allows
+> multiple starting values for each parameter and then iterates through multiple starting values, attempting a fit with
+> each set of start parameters. The best model is then picked on AIC score. This results in a more reproducible and
+> reliable method of fitting non-linear least squares regression in R.
+
+```{r fig.height=10}
+# Load of the clean data set.This data set is available on Zenodo (10.5281/zenodo.5744977).
+growth_death <- read.csv(here("data/clean/DataResco_clean.csv"))
+
+growth_death <-growth_death %>%
+select(-num, -name, -zone_en, -lat, -long)
+
+cols_to_make_factor <- growth_death %>%
+  select(batch, site, classe_age, campaign) %>%
+  colnames()
+
+growth_death <- growth_death %>% mutate_at(cols_to_make_factor, factor)
+growth_death$mean_CM <- as.numeric(growth_death$mean_CM)
+growth_death$mean_mass <- as.numeric(growth_death$mean_mass)
+growth_death$date <- as.Date(growth_death$date)
+```
+
+```{r echo=FALSE}
+rm(cols_to_make_factor)
+```
+
+According to previous studies, mortality and growth curves in *C. gigas* follow a sigmoid curve. Therefore, we fitted a
+logistic and a Gompertz model, which correspond to the most commonly used sigmoid models for growth and other data, to
+describe mean mass and cumulative mortality at time x.
+
+Logistic equation:
+
+```{r}
+Logistic <- function(a, b, c, x) {
+  return(a / (1 + exp(-b * (x - c))))
+}
+Logistic
+```
+
+Gompertz equation:
+
+```{r}
+Gompertz <- function(a, b, c, x) {
+  return(a * (exp(-exp(-b * (x - c)))))
+}
+Gompertz
+```
+
+These equations estimate three parameters:
+
+-   the upper asymptote (a)
+
+-   the slope at inflection (b)
+
+-   the time of inflection (c)
+
+Let's visualize the differences between the two equations:
+
+```{r}
+Logisticb <- function(param, x = 1:365) {
+  a <- param[2]
+  b <- param[1]
+  c <- param[3]
+  a / (1 + exp(-b * (x - c)))
+}
+
+Gompertzb <- function(param, x = 1:365) {
+  a <- param[2]
+  b <- param[1]
+  c <- param[3]
+  a * (exp(-exp(-b * (x - c))))
+}
+
+pipo1 <- data.frame(x = 1:365, y = Logisticb(c(0.05, 1, 150)), b = "0.05")
+pipo2 <- data.frame(x = 1:365, y = Logisticb(c(0.1, 1, 150)), b = "0.1")
+pipo3 <- data.frame(x = 1:365, y = Logisticb(c(1, 1, 150)), b = "1")
+pipo123 <- rbind(pipo1, pipo2, pipo3)
+pipo123$model <- as.factor(rep("Logistic"))
+
+pipo4 <- data.frame(x = 1:365, y = Gompertzb(c(0.05, 1, 150)), b = "0.05")
+pipo5 <- data.frame(x = 1:365, y = Gompertzb(c(0.1, 1, 150)), b = "0.1")
+pipo6 <- data.frame(x = 1:365, y = Gompertzb(c(1, 1, 150)), b = "1")
+pipo456 <- rbind(pipo4, pipo5, pipo6)
+pipo456$model <- as.factor(rep("Gompertz"))
+
+rbind(pipo123, pipo456) %>%
+  ggplot(aes(x = x, y = y, colour = b)) +
+  geom_line() +
+  annotate("segment",
+    x = 20, xend = 95, y = 1, yend = 1, arrow = arrow(), size = 1
+  ) +
+  geom_text(x = 5, y = 1, label = "a", color = "black", size = 5) +
+  geom_vline(xintercept = 150, col = "black", linetype = "dashed") +
+  geom_text(x = 155, y = 0, label = "c", color = "black", size = 5) +
+  theme_bw() +
+  labs(y = "f(x)", col = expression(b)) +
+  facet_grid(~model)
+```
+
+```{r echo=FALSE}
+rm(
+  pipo1, pipo2, pipo3, pipo4, pipo5, pipo6, pipo123, pipo456, Logisticb,
+  Gompertzb
+)
+```
+
+# Study sites {#sites-link}
+
+Here, we focus on 13 sites that were almost continuously monitored since 1993. All these sites stand in tidal areas
+except Marseillan, located in the Mediterranean Thau lagoon, for which tidal variations are only tenuous and Men-er-Roué
+which is in subtidal deep-water oyster culture area in the Bay of Quiberon.
+
+```{r}
+sites <- read.csv(here("data/raw/sites.csv"))
+sites <- sites %>%
+  mutate(site = as.factor(site), num = as.factor(paste(num)))
+
+# reorganize the order of sites to later make figures
+sites$num <- ordered(sites$num, levels = c("13", "12", "11", "10", "9", "8", "7", "6", "5", "4", "3", "2", "1"))
+
+datatable(sites,
+  rownames = FALSE,
+  caption = "Table 1: Site identification and coordinates in WGS84",
+  options = list(pageLength = 13, searching = FALSE)
+)
+```
+
+# Life-cycle indicators of spat
+
+## Mean mass
+
+```{r fig.height=10}
+N0_growth <- growth_death %>%
+  select(-mean_CM) %>%
+  drop_na() %>%
+  filter(classe_age == "N0")
+
+ggplot(data = N0_growth, aes(x = date_jj, y = mean_mass)) +
+  geom_line() +
+  geom_point(alpha = 0.7) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme(legend.position = "bottom")
+```
+
+To model the changes in mean mass, we needed to first find the starting values.
+
+> Random start parameter values are picked from a uniform distribution between `start_lower()` and `start_upper()` for
+> each parameter.
+
+For mean mass of spat, we will set the `start_lower()` and `start_upper()` values as follows :
+
+-   a (the upper asymptote) is between 0 and 110% of the maximum value observed at seeding date
+
+-   b (slope at inflection) is between 0 and 0.1 (which is already a very sharp increase)
+
+-   c (time of inflection) is visually estimated (in that case between 125 and 300)
+
+Second, we can set `lower()` and `upper()` which represent the upper and lower boundaries for parameter estimates. These
+will be fixed as follows :
+
+-   a (the upper asymptote) is between 0 and 125% of the maximum value observed at seeding date
+
+-   b (slope at inflection) is between 0 and 0.2
+
+-   c (time of inflection) is between 0 and 365 (i.e. growth slows down before the end of the year)
+
+```{r echo=FALSE}
+# N0_growth %>%
+#   group_by(site, campaign) %>%
+#   filter(date == max(date)) %>%
+#   ungroup() %>%
+#   summarize(max(mean_mass))
+```
+
+```{r}
+set.seed(1)
+N0_growth_fits <- N0_growth %>%
+  group_by(site, campaign) %>%
+  tidyr::nest() %>%
+  mutate(
+    fits_Logistic = purrr::map(data, ~ nls_multstart(mean_mass ~ Logistic(a, b, c, x = date_jj),
+      data = .x,
+      iter = 5000,  # number of combinations of starting parameters which will be tried
+      start_lower = c(a = 0, b = 0, c = 125),
+      start_upper = c(a = 61, b = 0.1, c = 300),
+      supp_errors = "Y",
+      na.action = na.omit,
+      convergence_count = 200,# The number of counts that the winning model should be undefeated for before it is 
+      # declared the winner.
+      lower = c(a = 0, b = 0, c = 0),
+      upper = c(a = 70, b = 0.2, c = 365)
+    )),
+    fits_Gompertz = purrr::map(data, ~ nls_multstart(mean_mass ~ Gompertz(a, b, c, x = date_jj),
+      data = .x,
+      iter = 5000,
+      start_lower = c(a = 0, b = 0, c = 125),
+      start_upper = c(a = 61, b = 0.1, c = 300),
+      supp_errors = "Y",
+      na.action = na.omit,
+      convergence_count = 200,
+      lower = c(a = 0, b = 0, c = 0),
+      upper = c(a = 70, b = 0.2, c = 365)
+    ))
+  )
+```
+
+We now check whether there are convergence issues
+
+```{r}
+N0_growth_fits %>%
+  mutate(summary = map(fits_Logistic, glance)) %>%
+  unnest(summary) %>%
+  filter(isConv == "FALSE")
+
+N0_growth_fits %>%
+  mutate(summary = map(fits_Gompertz, glance)) %>%
+  unnest(summary) %>%
+  filter(isConv == "FALSE")
+```
+
+The dataframes are empty (one with logistic models that failed to converge and the other one with Gompertz models that
+failed to converge). There are no convergence issues.
+
+```{r echo=FALSE}
+# growth_death %>%
+#   group_by(campaign, site, classe_age) %>%
+#   filter(date_jj == min(date_jj)) %>%
+#   ungroup() %>%
+#   summarize(median(date_jj)) %>%
+#   as.numeric()
+#
+# growth_death %>%
+#   group_by(campaign, site, classe_age) %>%
+#   filter(date_jj == max(date_jj)) %>%
+#   ungroup() %>%
+#   summarize(median(date_jj)) %>%
+#   as.numeric()
+```
+
+Let's see the if there is a good fit between observed (black circle) and predicted values (red and blue lines). We only
+make prediction between Julian day 65 (median day of seeding date) and 337 (median day of the end of the monitoring).
+
+```{r fig.height=10}
+N0_growth_model_stack <- gather(N0_growth_fits, "model", "best_model", starts_with("fits")) %>%
+  filter(!is.null(best_model)) %>%
+  mutate(aic = map_dbl(best_model, possibly(AIC, otherwise = NA))) %>%
+  mutate(model = case_when(model == "fits_Logistic" ~ "Logistic", model == "fits_Gompertz" ~ "Gompertz"))
+
+to_predict <- N0_growth %>%
+  do(data.frame(date_jj = seq(65, 337, by = 1), stringsAsFactors = FALSE))
+
+N0_growth_preds <- N0_growth_model_stack %>%
+  mutate(preds = map(best_model, augment, newdata = to_predict)) %>%
+  unnest(preds)
+
+N0_growth_preds %>%
+  ggplot() +
+  geom_line(aes(date_jj, .fitted, col = model), size = 1) +
+  geom_point(data = N0_growth, aes(date_jj, mean_mass), alpha = 0.7) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+Both models seems very good.
+
+Let's see if the AIC was calculated for all of them.
+
+```{r}
+filter(N0_growth_model_stack, aic == "-Inf" | is.na(aic) | aic == "Inf")
+```
+
+Yes it was (data frame empty).
+
+### Model selection
+
+Let's find out which model (Gompertz or Logistic) is the best.
+
+```{r fig.height=7}
+N0_growth_aic_median <- N0_growth_model_stack %>%
+  group_by(model) %>%
+  summarise(median_aic = median(aic), count = n()) %>%
+  ungroup()
+
+Spat_growth <- ggplot() +
+  geom_histogram(data = N0_growth_model_stack, aes(aic), alpha = 0.5, col = "black", bins = 60, fill = "#EE3B3B") +
+  geom_vline(data = N0_growth_aic_median, aes(xintercept = median_aic), linetype = "dashed") +
+  facet_wrap(model ~ ., ncol = 1, scales = "free") +
+  theme_graphic() +
+  ylab("Count") +
+  xlab("AIC score") +
+  geom_text(
+    data = N0_growth_aic_median, aes(label = paste("Median AIC =", round(median_aic, 1)), x = -50, y = 35),
+    col = "#EE3B3B", vjust = "inward", hjust = "inward"
+  )
+
+Table1 <- group_by(N0_growth_model_stack, site, campaign) %>%
+  filter(aic == min(aic, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by(model) %>%
+  tally() %>%
+  mutate(perc_best = round(n / sum(n) * 100)) %>%
+  select(-n) %>%
+  rename(Model = model) %>%
+  rename("Percentage of lowest \nAIC score" = perc_best)
+N0_growth_Table <- ggtexttable(Table1, rows = NULL, theme = ttheme("light"))
+
+ggarrange(Spat_growth, N0_growth_Table, ncol = 1, heights = c(1, 0.35))
+```
+
+```{r echo=FALSE}
+rm(N0_growth_aic_median, Table1, Spat_growth)
+```
+
+The logistic equation is better than the Gompertz one. For 81% of the year x site combinations, the logistic model has a
+lower AIC than the Gompertz model.
+
+### Best model (logistic)
+
+Let's see the predicted values for the logistic models
+
+```{r fig.height=10}
+N0_growth_preds %>%
+  filter(model == "Logistic") %>%
+  ggplot() +
+  geom_line(aes(date_jj, .fitted), size = 1, col = "#EE3B3B") +
+  geom_point(data = N0_growth, aes(date_jj, mean_mass), alpha = 0.7) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+The sites refer to [table 1](#sites-link)
+
+We can also plot the residuals of the logistic models
+
+```{r fig.height=10}
+N0_growth_model_stack %>%
+  filter(model == "Logistic") %>%
+  mutate(preds = map(best_model, augment)) %>%
+  unnest(preds) %>%
+  select(-data, -model, -best_model) %>%
+  ggplot(aes(date_jj, .resid)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  facet_grid(site ~ campaign)
+```
+
+We can looked at the distribution and median of the parameters for the logistic model
+
+```{r fig.height=10}
+N0_growth_params <- N0_growth_model_stack %>%
+  filter(model == "Logistic") %>%
+  mutate(params = map(best_model, tidy)) %>%
+  unnest(params) %>%
+  select(-data, -best_model)
+
+N0_growth_param_median <- N0_growth_params %>%
+  group_by(site, term) %>%
+  summarise(median = median(estimate), count = n()) %>%
+  ungroup()
+
+N0_growth_params %>%
+  ggplot() +
+  geom_density(aes(x = estimate, fill = term, ..scaled..), alpha = 0.3) +
+  scale_fill_viridis(discrete = TRUE) +
+  facet_grid(site ~ term, scales = "free") +
+  geom_vline(data = N0_growth_param_median, aes(xintercept = median, col = term), size = 1.5) +
+  scale_colour_viridis(discrete = TRUE) +
+  theme_graphic()
+```
+
+Let's plot the raster of mean mass predicted:
+
+```{r}
+N0_growth_preds337 <- N0_growth_preds %>%
+  filter(date_jj == "337" & model == "Logistic") %>%
+  select(-model, -date_jj) %>%
+  mutate(campaign = as.factor(campaign), variable = as.factor(rep("Growth")))
+
+ggplot(N0_growth_preds337, aes(y = site, x = campaign, fill = .fitted)) +
+  geom_raster() +
+  coord_fixed() +
+  theme(
+    panel.background = element_rect(fill = "white", colour = "white", size = 0.5, linetype = "solid"),
+    legend.position = "bottom", panel.border = element_rect(fill = NA)
+  ) +
+  xlab("campaign") +
+  ylab("Site") +
+  scale_fill_viridis(direction = -1)
+```
+
+## Cumulative mortality {#github-link}
+
+```{r fig.height=10}
+N0_death <- growth_death %>%
+  select(-mean_mass) %>%
+  drop_na() %>%
+  filter(classe_age == "N0")
+
+ggplot(data = N0_death, aes(x = date_jj, y = mean_CM)) +
+  geom_line() +
+  geom_point(alpha = 0.7) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme(legend.position = "bottom")
+```
+
+```{r echo=FALSE}
+# N0_death %>%
+#   group_by(campaign, site) %>%
+#   filter(date==max(date)) %>%
+#   ungroup() %>%
+#   summarize(max(mean_CM))
+```
+
+We set the `start_lower()` and `start_upper()` values for the parameters as follows :
+
+-   a (the upper asymptote) is between 0 and 1
+
+-   b (slope at inflection) is between 0 and 1
+
+-   c (time of inflection) is visually estimated (in that case between 125 and 300)
+
+We also set `lower()` and `upper()` which represent the upper and lower boundaries for parameter estimates. These are
+fixed as follows :
+
+-   a is between 0 and 1
+
+-   b is between 0 and 1
+
+-   c is between 0 and 365
+
+```{r}
+N0_death_fits <- N0_death %>%
+  group_by(site, campaign) %>%
+  tidyr::nest() %>%
+  mutate(
+    fits_Logistic = purrr::map(data, ~ nls_multstart(mean_CM ~ Logistic(a, b, c, x = date_jj),
+      data = .x,
+      iter = 5000,
+      start_lower = c(a = 0, b = 0, c = 125),
+      start_upper = c(a = 1, b = 1, c = 300),
+      supp_errors = "Y",
+      na.action = na.omit,
+      convergence_count = 200,
+      lower = c(a = 0, b = 0, c = 0),
+      upper = c(a = 1, b = 1, c = 365)
+    )),
+    fits_Gompertz = purrr::map(data, ~ nls_multstart(mean_CM ~ Gompertz(a, b, c, x = date_jj),
+      data = .x,
+      iter = 5000,
+      start_lower = c(a = 0, b = 0, c = 125),
+      start_upper = c(a = 1, b = 1, c = 300),
+      supp_errors = "Y",
+      na.action = na.omit,
+      convergence_count = 200,
+      lower = c(a = 0, b = 0, c = 0),
+      upper = c(a = 1, b = 1, c = 365)
+    ))
+  )
+```
+
+Let's see all the predictions for both models
+
+```{r fig.height=10}
+N0_death_model_stack <- gather(N0_death_fits, "model", "best_model", starts_with("fits")) %>%
+  filter(!is.null(best_model)) %>%
+  mutate(aic = map_dbl(best_model, possibly(AIC, otherwise = NA))) %>%
+  mutate(model = case_when(model == "fits_Logistic" ~ "Logistic", model == "fits_Gompertz" ~ "Gompertz"))
+
+N0_death_preds <- N0_death_model_stack %>%
+  mutate(preds = map(best_model, augment, newdata = to_predict)) %>%
+  unnest(preds) %>%
+  # to later see the models for which AIC was not calculated
+  mutate(aic_compiled = ifelse((aic == "-Inf" | aic == "Inf" | is.na(aic) == TRUE), "no", "yes")) %>%
+  select(-data, -best_model) %>%
+  mutate(model = as.factor(model))
+
+ggplot() +
+  geom_line(data = N0_death_preds, aes(date_jj, .fitted, col = model), size = 1) +
+  geom_point(data = N0_death, aes(date_jj, mean_CM), alpha = 0.5) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+Everything looks good.
+
+Let's see if some models failed to converge.
+
+For the Logistic model :
+
+```{r}
+N0_death_info_Logistic <- N0_death_fits %>%
+  mutate(summary = map(fits_Logistic, glance)) %>%
+  unnest(summary) %>%
+  filter(isConv == "FALSE") %>%
+  select(-data, -fits_Logistic, -fits_Gompertz, -finTol, -BIC)
+N0_death_info_Logistic
+
+failed_conv_log <- N0_death_info_Logistic %>%
+  select(site, campaign) %>%
+  mutate(model = rep("Logistic"))
+```
+
+Some models failed to converge.
+
+For the Gompertz model :
+
+```{r}
+N0_death_info_Gompertz <- N0_death_fits %>%
+  mutate(summary = map(fits_Gompertz, glance)) %>%
+  unnest(summary) %>%
+  filter(isConv == "FALSE") %>%
+  select(-data, -fits_Logistic, -fits_Gompertz, -finTol, -BIC)
+N0_death_info_Gompertz
+
+failed_conv_gomp <- N0_death_info_Gompertz %>%
+  select(site, campaign) %>%
+  mutate(model = rep("Gompertz"))
+
+failed_conv_death_N0 <- rbind(failed_conv_log, failed_conv_gomp)
+```
+
+```{r}
+rm(failed_conv_log, failed_conv_gomp, N0_death_info_Logistic, N0_death_info_Gompertz)
+```
+
+Some models failed to converge (around 30 for both the Gompertz and the logistic).
+
+Let's see the predictions for those models.
+
+```{r fig.height=10}
+N0_death_model_failled_conv <- inner_join(N0_death_preds, failed_conv_death_N0, by = c("site", "campaign", "model"))
+
+ggplot() +
+  geom_line(data = N0_death_model_failled_conv, aes(date_jj, .fitted, col = model), size = 1) +
+  geom_point(data = inner_join(N0_death, failed_conv_death_N0, by = c("site", "campaign")), aes(date_jj, mean_CM), alpha = 0.5) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+```{r echo=FALSE}
+rm(failed_conv_death_N0, N0_death_model_failled_conv)
+```
+
+These models may have issues to converge because it may be difficult to estimate the time of inflection. However, the
+upper asymptote should be correctly estimated even if the model do not converge. As were are mainly interested in
+estimating the cumulative mortality at the end of the year, this lack of convergence is not an issue to reach our goal.
+
+Now let's see if the AIC was computed for all models:
+
+```{r}
+filter(N0_death_model_stack, aic == "-Inf" | is.na(aic) == "TRUE" | aic == "Inf")
+```
+
+The AIC was not computed for only 2 models. Let's see if something look suspicious on the predicted mortality
+
+```{r}
+N0_failed_aic <- N0_death_preds %>%
+  filter(aic_compiled == "no") %>%
+  mutate(batch= paste(campaign, site, sep = "_"))
+
+N0_failed_obs <- N0_death %>%
+  mutate(batch= paste(campaign, site, sep = "_")) %>%
+  filter(batch%in% N0_failed_aic$batch)
+
+ggplot() +
+  geom_line(data = N0_failed_aic, aes(x = date_jj, y = .fitted, col = aic_compiled, linetype = model), size = 1) +
+  geom_point(data = N0_failed_obs, aes(x = date_jj, y = mean_CM), alpha = 0.5) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+```{r echo=FALSE}
+rm(N0_failed_obs)
+```
+
+The AIC was not computed likely because the mortality is always equal to 0. It thus wanted to fir a sigmoid but the data
+do not allow it. This is not an issue, both models are good.
+
+### Model selection
+
+```{r  fig.height=7}
+# Stack without the models for which AIC was not computed or that failed to converge
+N0_death_model_stack2 <- N0_death_model_stack %>%
+  filter(!is.na(aic) & !aic == "-Inf" & !aic == "Inf")
+
+N0_death_aic_median <- N0_death_model_stack2 %>%
+  group_by(model) %>%
+  summarise(median_aic = median(aic), count = n()) %>%
+  ungroup()
+
+Spat_mortality <- ggplot() +
+  geom_histogram(data = N0_death_model_stack2, aes(aic), alpha = 0.5, col = "black", bins = 60, fill = "#EE3B3B") +
+  geom_vline(data = N0_death_aic_median, aes(xintercept = median_aic), linetype = "dashed") +
+  facet_wrap(. ~ model, ncol = 1) +
+  theme_graphic() +
+  ylab("Count") +
+  xlab("AIC score") +
+  geom_text(data = N0_death_aic_median, aes(
+    label = paste("Median AIC =", round(median_aic, 1)),
+    x = min(N0_death_model_stack2$aic), y = 70
+  ), col = "#EE3B3B", vjust = "inward", hjust = "inward")
+
+Table3 <- group_by(N0_death_model_stack2, site, campaign) %>%
+  filter(aic == min(aic, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by(model) %>%
+  tally() %>%
+  mutate(perc_best = round(n / sum(n) * 100)) %>%
+  select(-n) %>%
+  rename(Model = model) %>%
+  rename("Percentage of lowest \nAIC score" = perc_best)
+N0_death_Table <- ggtexttable(Table3, rows = NULL, theme = ttheme("light"))
+
+ggarrange(Spat_mortality, N0_death_Table, ncol = 1, heights = c(1, 0.35))
+```
+
+```{r echo=FALSE}
+rm(N0_death_aic_median, Table3, Spat_mortality, N0_death_model_stack, N0_failed_aic)
+```
+
+The best model is the Gompertz one.
+
+### Best model (Gompertz)
+
+```{r fig.height=10}
+N0_death_preds %>%
+  filter(model == "Gompertz") %>%
+  ggplot() +
+  geom_line(aes(date_jj, .fitted), size = 1, col = "#EE3B3B") +
+  geom_point(data = N0_death, aes(date_jj, mean_CM), alpha = 0.7) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme_bw()
+```
+
+The sites refer to [table 1](#sites-link)
+
+We can represent the median of the parameter (for the model that did not failed to converge)
+
+```{r fig.height=10}
+N0_death_params <- N0_death_model_stack2 %>%
+  filter(model == "Gompertz") %>%
+  mutate(params = map(best_model, tidy)) %>%
+  unnest(params) %>%
+  select(-data, -best_model)
+
+N0_death_param_median <- N0_death_params %>%
+  group_by(site, term) %>%
+  summarise(median = median(estimate), count = n()) %>%
+  ungroup()
+
+N0_death_params %>%
+  ggplot() +
+  geom_density(aes(x = estimate, fill = term, ..scaled..), alpha = 0.3) +
+  scale_fill_viridis(discrete = TRUE) +
+  facet_grid(site ~ term, scales = "free") +
+  geom_vline(data = N0_death_param_median, aes(xintercept = median, col = term), size = 1.5) +
+  scale_colour_viridis(discrete = TRUE) +
+  theme_graphic()
+```
+
+Let's plot the raster of mortality
+
+```{r fig.height=10}
+N0_death_preds337 <- N0_death_preds %>%
+  filter(date_jj == "337" & model == "Gompertz") %>%
+  select(-model, -date_jj, -aic_compiled) %>%
+  mutate(campaign = as.factor(campaign), variable = as.factor(rep("Death")))
+
+ggplot(N0_death_preds337, aes(y = site, x = campaign, fill = .fitted)) +
+  geom_raster() +
+  coord_fixed() +
+  theme(
+    panel.background = element_rect(fill = "white", colour = "white", size = 0.5, linetype = "solid"),
+    legend.position = "bottom", panel.border = element_rect(fill = NA)
+  ) +
+  xlab("campaign") +
+  ylab("Site") +
+  scale_fill_viridis(direction = -1)
+```
+
+Now we can put on the same figure the cumulative mortality and growth of spat:
+
+```{r figure2, fig.height=10}
+N0_death_growth <- rbind(N0_death_preds337, N0_growth_preds337)
+
+# Add information of the sites
+# sites$num <- ordered(sites$num, levels = c("13", "12", "11", "10", "9", "8", "7", "6", "5", "4", "3", "2", "1"))
+
+N0_death_growth <- merge(N0_death_growth, sites, by = "site", all.x = T)
+
+N0_death_growth_graph <- ggplot() +
+  coord_fixed() +
+  geom_tile(data = subset(N0_death_growth, variable == "Death"), aes(x = campaign, y = num, fill = .fitted)) +
+  geom_point(
+    data = subset(N0_death_growth, variable == "Growth"), aes(x = campaign, y = num, size = .fitted),
+    fill = "white", shape = 21
+  ) +
+  scale_fill_viridis(name = "Cumulative mortality predicted", direction = -1) +
+  theme_graphic() +
+  scale_size_continuous(name = "Mean mass predicted", breaks = c(15, 30, 45), label = c("15 g", "30 g", "45 g")) +
+  ylab("Site") +
+  xlab("") +
+  theme(
+    panel.background = element_rect(fill = "white", colour = "white", size = 0.5, linetype = "solid"),
+    legend.position = "bottom", legend.box = "horizontal", plot.margin = unit(c(0, 0, 0, 0), "null")
+  ) +
+  guides(
+    fill = guide_colourbar(
+      title.position = "top", title.hjust = 0.5, frame.colour = "black", barwidth = 12,
+      barheight = 1, order = 1
+    ),
+    size = guide_legend(title.position = "top", title.hjust = 0.5)
+  )
+N0_death_growth_graph
+ggsave(here::here("figs/Fig2_spat_mortality_growth.png"), N0_death_growth_graph, width = 236, height = 138, dpi = 600, units = c("mm"))
+```
+
+The site refer to [table 1](#sites-link)
+
+# Life-cycle indicators of half-grown oysters
+
+## Mean mass
+
+```{r fig.height=10}
+J1_growth <- growth_death %>%
+  select(-mean_CM) %>%
+  drop_na() %>%
+  filter(classe_age == "J1")
+
+ggplot(data = J1_growth, aes(x = date_jj, y = mean_mass)) +
+  geom_line() +
+  geom_point(alpha = 0.7) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme(legend.position = "bottom")
+```
+
+As the mean mass of half-grown individuals at the beginning of the campaign was higher than 0, we fitted a
+four-parameter version of the logistic and Gompertz models, which is common place in the growth-curve analysis of
+bacterial counts. We estimated (d) which represents the lowest asymptote of the curve. This parameter also moves the
+model curve vertically without changing its shape. The upper asymptote thus becomes equal to d + a.
+
+Logistic equation:
+
+```{r}
+Logistic2 <- function(a, b, c, d, x) {
+  return(d + (a / (1 + exp(-b * (x - c)))))
+}
+
+Logistic2
+```
+
+Gompertz equation:
+
+```{r}
+Gompertz2 <- function(a, b, c, d, x) {
+  return(d + (a * (exp(-exp(-b * (x - c))))))
+}
+Gompertz2
+```
+
+```{r echo=FALSE}
+# J1_growth %>%
+#   group_by(site, campaign) %>%
+#   filter(date == min(date)) %>%
+#   ungroup() %>%
+#   summarize(max(mean_mass))
+#
+# J1_growth %>%
+#   group_by(site, campaign) %>%
+#   filter(date == max(date)) %>%
+#   ungroup() %>%
+#   summarize(max(mean_mass))
+```
+
+The starting values for parameter b (slope at inflection) are the same as those for the spat. We set the `start_lower()`
+and `start_upper()` values for the other parameters as follows :
+
+-   c (time of inflection) is between 75 and 300
+
+-   d (lowest asymptote) is between 0 and 110% of the maximum value at the seeding date
+
+-   a is equal to 110 % of (the upper asymptote (a+ d) - the lowest asymptote (d)). a is thus equal to 123 - 54.3 = 69.
+    110% of this values = 70.
+
+We also set `lower()` and `upper()` which represent the upper and lower boundaries for parameter estimates. These are
+fixed as follows :
+
+-   c is between 0 and 365
+
+-   d is between 0 and 125% of the maximum value at the seeding date
+
+-   a is between 0 and 125% of (the upper asymptote - the lowest asymptote the maximum value). a is thus equal to 86
+
+```{r}
+J1_growth_fits <- J1_growth %>%
+  select(site, campaign, date_jj, mean_mass) %>%
+  group_by(site, campaign) %>%
+  tidyr::nest() %>%
+  mutate(
+    fits_Logistic = purrr::map(data, ~ nls_multstart(mean_mass ~ Logistic2(a, b, c, d, x = date_jj),
+      data = .x,
+      iter = 5000,
+      start_lower = c(a = 0, b = 0, c = 75, d = 0),
+      start_upper = c(a = 70, b = 0.1, c = 300, d = 60),
+      supp_errors = "Y",
+      na.action = na.omit,
+      convergence_count = 200,
+      lower = c(a = 0, b = 0, c = 0, d = 0),
+      upper = c(a = 86, b = 0.2, c = 365, d = 69)
+    )),
+    fits_Gompertz = purrr::map(data, ~ nls_multstart(mean_mass ~ Gompertz2(a, b, c, d, x = date_jj),
+      data = .x,
+      iter = 5000,
+      start_lower = c(a = 0, b = 0, c = 75, d = 0),
+      start_upper = c(a = 70, b = 0.1, c = 300, d = 60),
+      supp_errors = "Y",
+      na.action = na.omit,
+      convergence_count = 200,
+      lower = c(a = 0, b = 0, c = 0, d = 0),
+      upper = c(a = 86, b = 0.2, c = 365, d = 69)
+    ))
+  )
+
+# summary(J1_growth_fits$fits_Logistic[[3]])
+# glance(J1_growth_fits$fits_Logistic[[3]])
+```
+
+```{r fig.height=10}
+J1_growth_model_stack <- gather(J1_growth_fits, "model", "best_model", starts_with("fits")) %>%
+  filter(!is.null(best_model)) %>%
+  mutate(aic = map_dbl(best_model, possibly(AIC, otherwise = NA))) %>%
+  mutate(model = case_when(model == "fits_Logistic" ~ "Logistic", model == "fits_Gompertz" ~ "Gompertz"))
+
+J1_growth_preds <- J1_growth_model_stack %>%
+  mutate(preds = map(best_model, augment, newdata = to_predict)) %>%
+  unnest(preds) %>%
+  mutate(aic_compiled = if_else(aic == "-Inf" | aic == "Inf" | is.na(aic) == TRUE, "no", "yes"))
+
+J1_growth_preds %>%
+  ggplot() +
+  geom_line(aes(x = date_jj, y = .fitted, col = model)) +
+  geom_point(data = J1_growth, aes(x = date_jj, y = mean_mass), alpha = 0.7) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+The predictions looks good.
+
+Let's see if some model failed to converge:
+
+```{r}
+J1_growth_fits %>%
+  mutate(summary = map(fits_Logistic, glance)) %>%
+  unnest(summary) %>%
+  filter(isConv == "FALSE")
+
+J1_growth_fits %>%
+  mutate(summary = map(fits_Gompertz, glance)) %>%
+  unnest(summary) %>%
+  filter(isConv == "FALSE")
+```
+
+All models converged.
+
+Let's see if the AIC was computed for all models:
+
+```{r}
+filter(J1_growth_model_stack, aic == "-Inf" | is.na(aic) == TRUE | aic == "Inf")
+```
+
+The AIC was not compiled for a lot of models (183 out of the 496 models). This is surprising since almost all models
+converged. Let's try to find the origin of these "issues".
+
+First, let's see if some predictions seem odd for the models for which AIC was not computed.
+
+```{r fig.height=10}
+J1_growth_failled_aic <- filter(J1_growth_preds, aic_compiled == "no") %>%
+  select(site, campaign, model, date_jj, .fitted) %>%
+  mutate(batch= paste(campaign, site, sep = "_"))
+
+J1_failed_obs <- J1_growth %>%
+  mutate(batch= paste(campaign, site, sep = "_")) %>%
+  filter(batch%in% J1_growth_failled_aic$batch)
+
+ggplot() +
+  geom_line(data = J1_growth_failled_aic, aes(date_jj, .fitted, col = model), size = 1) +
+  geom_point(data = J1_failed_obs, aes(date_jj, mean_mass), alpha = 0.5) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+The predictions do not seem odd. Let's check the residuals of the models (here for the logistic models)
+
+```{r fig.height=10}
+filter(J1_growth_model_stack, model == "Logistic") %>%
+  mutate(preds = map(best_model, augment)) %>%
+  unnest(preds) %>%
+  select(-data, -model, -best_model) %>%
+  group_by(site, campaign) %>%
+  mutate(aic_compiled = if_else(aic == "-Inf" | aic == "Inf" | is.na(aic) == TRUE, "no", "yes")) %>%
+  filter(aic_compiled == "no") %>%
+  ggplot() +
+  geom_point(aes(date_jj, .resid, col = aic_compiled), alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = 2) +
+  facet_grid(site ~ campaign) +
+  theme(legend.position = "none")
+```
+
+The AIC was not compiled for some models because there was a perfect fit (sum of residuals = 0) ! These models are thus
+not problematic.
+
+### Model selection
+
+We now find out which model (Logistic or Gompertz) is the best.
+
+```{r  fig.height=7}
+J1_growth_model_stack2 <- J1_growth_model_stack %>%
+  filter(!is.na(aic) == TRUE & !aic == "-Inf" & !aic == "Inf") 
+
+J1_growth_aic_median <- J1_growth_model_stack2 %>%
+  group_by(model) %>%
+  summarise(median_aic = median(aic), count = n()) %>%
+  ungroup()
+
+Half_grown_growth <- ggplot() +
+  geom_histogram(data = J1_growth_model_stack2, aes(aic), alpha = 0.5, col = "black", bins = 60, fill = "#1C86EE") +
+  geom_vline(data = J1_growth_aic_median, aes(xintercept = median_aic), col = "#1C86EE", linetype = "dashed") +
+  facet_grid(model ~ .) +
+  theme_graphic() +
+  ylab("Count") +
+  xlab("AIC score") +
+  geom_text(data = J1_growth_aic_median, aes(
+    label = paste("Median AIC =", round(median_aic, 1)),
+    x = -250, y = 35
+  ), col = "#1C86EE", vjust = "inward", hjust = "inward")
+
+Table2 <- group_by(J1_growth_model_stack2, site, campaign) %>%
+  filter(aic == min(aic, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by(model) %>%
+  tally() %>%
+  mutate(perc_best = round(n / sum(n) * 100)) %>%
+  select(-n) %>%
+  rename(Model = model) %>%
+  rename("Percentage of lowest \nAIC score" = perc_best)
+J1_growth_Table <- ggtexttable(Table2, rows = NULL, theme = ttheme("light"))
+
+ggarrange(Half_grown_growth, J1_growth_Table, ncol = 1, heights = c(1, 0.35))
+```
+
+```{r echo=FALSE}
+rm(Table2, J1_growth_aic_median, Half_grown_growth, J1_growth_failled_aic, J1_failed_obs)
+```
+
+The best model is the logistic one !
+
+### Best model (logistic)
+
+```{r fig.height=10}
+J1_growth_preds %>%
+  filter(model == "Logistic") %>%
+  ggplot() +
+  geom_line(aes(date_jj, .fitted), size = 1, col = "#1C86EE") +
+  geom_point(data = J1_growth, aes(date_jj, mean_mass), alpha = 0.7) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme_bw()
+```
+
+The sites refer to [table 1](#sites-link)
+
+We can represent the parameters of the the best models
+
+```{r fig.height=10}
+J1_growth_model_stack2$campaign <- as.numeric(paste(J1_growth_model_stack2$campaign))
+
+J1_growth_params <- J1_growth_model_stack2 %>%
+  filter(model == "Logistic") %>%
+  mutate(params = map(best_model, tidy)) %>%
+  unnest(params) %>%
+  select(-data, -best_model) %>%
+  mutate(site = as.factor(site))
+
+J1_growth_params_median <- J1_growth_params %>%
+  group_by(term, site) %>%
+  summarise(median = median(estimate)) %>%
+  mutate(site = as.factor(site))
+
+ggplot() +
+  geom_density(data= J1_growth_params, aes(x = estimate, fill = site, ..scaled..), alpha = 0.3) +
+  scale_fill_viridis(discrete = TRUE) +
+  facet_grid(site ~ term, scales = "free") +
+  geom_vline(data = J1_growth_params_median, aes(xintercept = median, col = site), size = 1.5) +
+  scale_colour_viridis(discrete = TRUE) +
+  theme_graphic()
+```
+
+```{r echo=FALSE}
+rm(J1_growth_params_median, J1_growth_params, J1_growth_model_stack)
+```
+
+For the half-grown, as the mass at the beginning of the monitoring is higher than 0, it makes little sense to represent
+the mass at the end of the campaign since it depend on the initial mass. We thus decided to represent the growth ratio
+(mass at the Julian day 337 divided by mass at Julian day 65)
+
+```{r fig.height=10}
+J1_growth_preds337_65 <- J1_growth_preds %>%
+  filter(model == "Logistic" & (date_jj == "65" | date_jj == "337")) %>%
+  select(-aic, -model, -aic_compiled) %>%
+  reshape2::dcast(campaign + site ~ date_jj, value = .fitted) %>%
+  rename("pred65" = "65", "pred337" = "337") %>%
+  mutate(increase = pred337 / pred65) 
+
+ggplot() +
+  coord_fixed() +
+  geom_tile(data = J1_growth_preds337_65, aes(campaign, site, fill = increase)) +
+  scale_fill_viridis(name = "Growth ratio", direction = -1) +
+  theme_graphic() +
+  theme(legend.position = "bottom")
+```
+
+## Cumulative mortality
+
+```{r}
+J1_death <- growth_death %>%
+  select(-mean_mass) %>%
+  drop_na() %>%
+  filter(classe_age == "J1")
+```
+
+```{r fig.height=10}
+ggplot(data = J1_death, aes(x = date_jj, y = mean_CM)) +
+  geom_line() +
+  geom_point(alpha = 0.7) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme(legend.position = "bottom")
+```
+
+The `start_lower()` and `start_upper()` values as well as the `lower()` and `upper()` boundaries were almost the same
+than those for the spat (you can see them [here](#github-link)). The only difference is that `start_upper()` and
+`upper()` were respectively 0.1 and 0.2 comapred to 1 and 1 for spat.
+
+```{r}
+J1_death_fits <- J1_death %>%
+  group_by(site, campaign) %>%
+  tidyr::nest() %>%
+  mutate(
+    fits_Logistic = purrr::map(data, ~ nls_multstart(mean_CM ~ Logistic(a, b, c, x = date_jj),
+      data = .x,
+      iter = 5000,
+      start_lower = c(a = 0, b = 0, c = 125),
+      start_upper = c(a = 1, b = 0.1, c = 300),
+      supp_errors = "Y",
+      na.action = na.omit,
+      convergence_count = 200,
+      lower = c(a = 0, b = 0, c = 0),
+      upper = c(a = 1, b = 0.2, c = 365)
+    )),
+    fits_Gompertz = purrr::map(data, ~ nls_multstart(mean_CM ~ Gompertz(a, b, c, x = date_jj),
+      data = .x,
+      iter = 5000,
+      start_lower = c(a = 0, b = 0, c = 125),
+      start_upper = c(a = 1, b = 0.1, c = 300),
+      supp_errors = "Y",
+      na.action = na.omit,
+      convergence_count = 200,
+      lower = c(a = 0, b = 0, c = 0),
+      upper = c(a = 1, b = 0.2, c = 365)
+    ))
+  )
+```
+
+```{r fig.height=10}
+J1_death_model_stack <- gather(J1_death_fits, "model", "best_model", starts_with("fits")) %>%
+  filter(!is.null(best_model)) %>%
+  mutate(aic = map_dbl(best_model, possibly(AIC, otherwise = NA))) %>%
+  mutate(model = case_when(model == "fits_Logistic" ~ "Logistic", model == "fits_Gompertz" ~ "Gompertz"))
+
+J1_death_preds <- J1_death_model_stack %>%
+  mutate(preds = map(best_model, augment, newdata = to_predict)) %>%
+  unnest(preds) %>%
+  select(-data, -best_model, -aic)
+
+J1_death_preds %>%
+  ggplot() +
+  geom_line(aes(x = date_jj, y = .fitted, col = model), size = 1) +
+  geom_point(data = J1_death, aes(x = date_jj, y = mean_CM), alpha = 0.7) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+Predictions looks good. Are there some convergence issues ?
+
+For the Logistic model:
+
+```{r}
+J1_death_info_Logistic <- J1_death_fits %>%
+  mutate(summary = map(fits_Logistic, glance)) %>%
+  unnest(summary) %>%
+  filter(isConv == "FALSE") %>%
+  select(-data, -fits_Logistic, -fits_Gompertz, -finTol)
+J1_death_info_Logistic
+
+failed_conv_log <- J1_death_info_Logistic %>%
+  select(site, campaign) %>%
+  mutate(model = rep("Logistic"))
+```
+
+Few convergence issues.
+
+For the Gompertz models :
+
+```{r}
+J1_death_info_Gompertz <- J1_death_fits %>%
+  mutate(summary = map(fits_Gompertz, glance)) %>%
+  unnest(summary) %>%
+  filter(isConv == "FALSE") %>%
+  select(-data, -fits_Logistic, -fits_Gompertz, -finTol)
+J1_death_info_Gompertz
+
+failed_conv_gomp <- J1_death_info_Gompertz %>%
+  select(site, campaign) %>%
+  mutate(model = rep("Gompertz"))
+
+failed_conv_death_J1 <- rbind(failed_conv_log, failed_conv_gomp)
+```
+
+```{r echo=FALSE}
+rm(failed_conv_log, failed_conv_gomp, J1_death_info_Logistic, J1_death_info_Gompertz)
+```
+
+Some models failed to converge. Around 10 for both models. Let's visualize the models that failed to converge:
+
+```{r fig.height=10}
+J1_death_model_failled_conv <- inner_join(J1_death_preds, failed_conv_death_J1, by = c("site", "campaign", "model"))
+
+ggplot() +
+  geom_line(data = J1_death_model_failled_conv, aes(x = date_jj, y = .fitted, col = model), size = 1) +
+  geom_point(data = inner_join(J1_death, failed_conv_death_J1,
+    by = c("site", "campaign")),
+    aes(x = date_jj, y = mean_CM), alpha = 0.5
+  ) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+Everything looks good. We now see if the AIC was computed for all models
+
+```{r}
+filter(J1_death_model_stack, is.na(aic) == TRUE | aic == "Inf" | aic == "-Inf")
+```
+
+The AIC was not compiled for GEFOS in 1998. Let's see the prediction
+
+```{r fig.height=5}
+J1_death_preds %>%
+  filter(site == "GEFOS" & campaign == "1998") %>%
+  ggplot() +
+  geom_line(aes(x = date_jj, y = .fitted, col = model), size = 1) +
+  geom_point(data = subset(J1_death, site == "GEFOS" & campaign == "1998"), aes(x = date_jj, y = mean_CM), alpha = 0.7) +
+  theme_bw()
+```
+
+AIC was not computed because there is a perfect fit.
+
+### Model selection
+
+We now select the best model
+
+```{r  fig.height=7}
+J1_death_model_stack2 <- J1_death_model_stack %>%
+  filter(!is.na(aic) == TRUE & !aic == "-Inf" & !aic == "Inf") 
+
+J1_death_aic_median <- J1_death_model_stack2 %>%
+  group_by(model) %>%
+  summarise(median_aic = median(aic), count = n()) %>%
+  ungroup()
+
+Half_grown_mortality <- ggplot() +
+  geom_histogram(data = J1_death_model_stack2, aes(aic), alpha = 0.5, col = "black", bins = 60, fill = "#1C86EE") +
+  geom_vline(data = J1_death_aic_median, aes(xintercept = median_aic), linetype = "dashed") +
+  facet_grid(model ~ .) +
+  ylab("Count") +
+  xlab("AIC score") +
+  theme_graphic() +
+  geom_text(
+    data = J1_death_aic_median, aes(label = paste("Median AIC =", round(median_aic, 1)), x = -1300, y = 100),
+    col = "#1C86EE"
+  )
+
+Table4 <- group_by(J1_death_model_stack2, site, campaign) %>%
+  filter(aic == min(aic, na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by(model) %>%
+  tally() %>%
+  mutate(perc_best = round(n / sum(n) * 100)) %>%
+  select(-n) %>%
+  rename(Model = model) %>%
+  rename("Percentage of lowest \nAIC score" = perc_best)
+J1_death_Table <- ggtexttable(Table4, rows = NULL, theme = ttheme("light"))
+
+ggarrange(Half_grown_mortality, J1_death_Table, ncol = 1, heights = c(1, 0.35))
+```
+
+```{r echo=FALSE}
+rm(J1_death_aic_median, Half_grown_mortality, Table4, J1_death_model_failled_conv)
+```
+
+The Gompertz model is the best
+
+### Best model (Gompertz)
+
+```{r fig.height=10}
+J1_death_preds %>%
+  filter(model == "Gompertz") %>%
+  ggplot() +
+  geom_line(aes(date_jj, .fitted), size = 1, col = "#1C86EE") +
+  geom_point(data = J1_death, aes(date_jj, mean_CM), alpha = 0.7) +
+  facet_grid(site ~ campaign, scale = "free_y") +
+  theme_bw()
+```
+
+The sites refer to [table 1](#sites-link)
+
+```{r figure4, fig.height=10}
+J1_death_params <- J1_death_model_stack2 %>%
+  filter(model == "Gompertz") %>%
+  mutate(params = map(best_model, tidy)) %>%
+  unnest(params) %>%
+  select(-data, -best_model) %>% 
+  mutate(site = as.factor(site))
+
+J1_death_params_median <- J1_death_params %>%
+  group_by(term, site) %>%
+  summarise(median = median(estimate), count = n()) %>%
+  mutate(site = as.factor(site))
+
+sites$num <- ordered(sites$num, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"))
+
+J1_death_params2 <- merge(J1_death_params, sites, by = "site", all.x = T)
+J1_death_params_median2  <- merge(J1_death_params_median , sites, by = "site", all.x = T)
+
+graph_J1_death_param <- ggplot() +
+  geom_density(data = J1_death_params2, aes(x = estimate, fill = num, ..scaled..), alpha = 0.3) +
+  scale_fill_viridis(discrete = TRUE) +
+  facet_grid(num ~ term, scales = "free") +
+  geom_vline(data= J1_death_params_median2, aes(xintercept = median, col = num), size = 1.5) +
+  scale_colour_viridis(discrete = TRUE) +
+  theme_graphic()+
+  theme(legend.position="none")+
+  ylab("Scale density")+
+  xlab("Estimate")
+graph_J1_death_param
+ggsave(here("figs/Fig4_half_grown_mortality_param.png"), graph_J1_death_param, width = 210, height = 250, dpi = 600, units = c("mm"))
+```
+
+```{r echo=FALSE}
+rm(J1_death_params_median, J1_death_params, J1_death_model_stack)
+```
+
+We now put the mean mass and mortality of half-grown on the same figure
+
+```{r figure3, fig.height=10}
+J1_death_preds337 <- J1_death_preds %>%
+  filter(date_jj == "337" & model == "Gompertz") %>%
+  select(-model) %>%
+  reshape2::dcast(campaign + site ~ date_jj, value = .fitted) %>%
+  rename(".fitted" = "337") %>%
+  mutate(variable = rep("Death"))
+
+J1_growth_preds337_65$variable <- rep("Growth")
+J1_growth_preds337_65 <- J1_growth_preds337_65 %>%
+  select(-pred65, -pred337) %>%
+  rename(".fitted" = "increase")
+
+J1_death_growth <- rbind(J1_death_preds337, J1_growth_preds337_65)
+sites$num <- ordered(sites$num, levels = c("13", "12", "11", "10", "9", "8", "7", "6", "5", "4", "3", "2", "1"))
+
+J1_death_growth <- merge(J1_death_growth, sites, by = "site", all.x = T)
+
+J1_death_growth_graph <- ggplot() +
+  coord_fixed() +
+  geom_tile(data = subset(J1_death_growth, variable == "Death"), aes(campaign, num, fill = .fitted)) +
+  geom_point(
+    data = subset(J1_death_growth, variable == "Growth"), aes(campaign, num, size = .fitted),
+    fill = "white", shape = 21
+  ) +
+  scale_fill_viridis(
+    name = "Cumulative mortality predicted", limits = c(0, 0.73), breaks = c(0.0, 0.2, 0.4, 0.6),
+    direction = -1
+  ) +
+  theme_graphic() +
+  scale_size_continuous(name = "Growth ratio", breaks = c(2, 3, 4, 5), label = c("2", "3", "4", "5")) +
+  xlab("") +
+  ylab("Site") +
+  theme(
+    panel.background = element_rect(fill = "white", colour = "white", size = 0.5, linetype = "solid"),
+    legend.position = "bottom", legend.box = "horizontal", plot.margin = unit(c(0, 0, 0, 0), "null")
+  ) +
+  guides(
+    fill = guide_colourbar(
+      title.position = "top", title.hjust = 0.5, frame.colour = "black", barwidth = 12, barheight = 1, order = 1
+    ),
+    size = guide_legend(title.position = "top", title.hjust = 0.5)
+  )
+J1_death_growth_graph
+
+ggsave(here::here("figs/Fig3_half_grown_mortality_growth.png"), J1_death_growth_graph, width = 236, height = 138, dpi = 600, units = c("mm"))
+```
+
+# Technical validation
+
+## Mean mass of oysters
+
+```{r figure5, fig.height=10}
+N0_growth_best_model <- N0_growth_preds %>%
+  filter(model == "Logistic") %>%
+  select(site, campaign, date_jj, .fitted) %>%
+  mutate(classe_age = as.factor("N0"))
+
+N0_J1_growth_preds <- J1_growth_preds %>%
+  filter(model == "Logistic") %>%
+  select(site, campaign, date_jj, .fitted) %>%
+  mutate(classe_age = as.factor("J1")) %>%
+  bind_rows(N0_growth_best_model, .)
+
+sites$num <- ordered(sites$num, levels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"))
+
+N0_J1_growth_preds <- merge(N0_J1_growth_preds, sites, by = "site", all.x = T)
+
+N0_J1_growth <- rbind(N0_growth, J1_growth)
+N0_J1_growth <- merge(N0_J1_growth, sites, by = "site")
+
+Growth_graphique_validation <-
+  ggplot() +
+  geom_point(data = N0_J1_growth, aes(date_jj, mean_mass), alpha = 0.6, size = 1.2) +
+  geom_line(data = N0_J1_growth_preds, aes(date_jj, .fitted, col = classe_age), size = 0.5) +
+  scale_x_continuous(limits = c(46, 365), guide = guide_axis(n.dodge = 2)) +
+  facet_grid(num ~ campaign, scale = "free_y") +
+  scale_color_manual(name = "Age classes", labels = c("Spat", "Half-grown"), values = c("#EE3B3B", "#1C86EE")) +
+  theme_graphic() +
+  theme(legend.position = "none", plot.margin = unit(c(0, 0, 0, 0), "null")) +
+  xlab("Julian day") +
+  ylab("Mean mass of oysters (g)")
+Growth_graphique_validation
+ggsave(here::here("figs/Fig5_growth_validation.png"), Growth_graphique_validation, width = 315, height = 184, dpi = 400, units = c("mm"))
+```
+
+The sites refer to [table 1](#sites-link)
+
+## Cumulative mortality of oysters
+
+```{r figure6, fig.height=10}
+N0_death_best_model <- N0_death_preds %>%
+  filter(model == "Gompertz") %>%
+  select(-aic_compiled, -aic) %>%
+  mutate(classe_age = rep("N0"))
+
+N0_J1_death_preds <- J1_death_preds %>%
+  filter(model == "Gompertz") %>%
+  mutate(classe_age = rep("J1")) %>%
+  bind_rows(N0_death_best_model, .) %>%
+  mutate(classe_age = as.factor(classe_age))
+
+N0_J1_death_preds <- merge(N0_J1_death_preds, sites, by = "site")
+
+N0_J1_death <- rbind(N0_death, J1_death)
+N0_J1_death <- merge(N0_J1_death, sites, by = "site")
+
+death_graphique_validation <-
+  ggplot() +
+  geom_point(data = N0_J1_death, aes(date_jj, mean_CM), alpha = 0.6, size = 1.2) +
+  geom_line(data = N0_J1_death_preds, aes(date_jj, .fitted, col = classe_age), size = 0.5) +
+  scale_x_continuous(limits = c(46, 365), guide = guide_axis(n.dodge = 2)) +
+  scale_color_manual(name = "Age classes", labels = c("Spat", "Half-grown"), values = c("#EE3B3B", "#1C86EE")) +
+  facet_grid(num ~ campaign, scale = "free_y") +
+  theme_graphic() +
+  theme(legend.position = "none", plot.margin = unit(c(0, 0, 0, 0), "null")) +
+  xlab("Julian day") +
+  ylab("Cumulative mortality of oysters")
+death_graphique_validation
+ggsave(here::here("figs/Fig6_death_validation.png"), death_graphique_validation, width = 315, height = 184, dpi = 400, units = c("mm"))
+```
+
+The sites refer to [table 1](#sites-link)
+
+## Model selection
+
+```{r, figure7, fig.height=12}
+# for growth
+N0_growth_model_stack <- N0_growth_model_stack %>%
+  select(site, campaign, aic, model) %>%
+  mutate(species = as.factor(rep("Spat")))
+
+J1_growth_model_stack2 <- J1_growth_model_stack2 %>%
+  select(site, campaign, aic, model) %>%
+  mutate(species = as.factor(rep("Half-grown"))) %>%
+  mutate(campaign = as.factor(campaign))
+
+growth_model_stack <- rbind(N0_growth_model_stack, J1_growth_model_stack2)
+growth_model_stack$species <- relevel(growth_model_stack$species, ref = "Spat")
+
+growth_aic_median <- growth_model_stack %>%
+  group_by(species, model) %>%
+  summarise(median_aic = median(aic), count = n()) %>%
+  ungroup()
+
+model_selection_growth <- ggplot() +
+  geom_histogram(data = growth_model_stack, aes(aic, fill = species), alpha = 0.5, col = "black", bins = 60) +
+  geom_vline(data = growth_aic_median, aes(xintercept = median_aic), linetype = "dashed") +
+  theme_graphic() +
+  ylab("Count") +
+  xlab("AIC score") +
+  ggtitle("a. Growth") +
+  geom_text(data = growth_aic_median, aes(
+    col = species, label = paste("Median AIC =", round(median_aic, 1)),
+    x = c(-58, -58, -250, -250), y = 30
+  ), vjust = "inward", hjust = "inward") +
+  facet_grid(model ~ species, scales = "free") +
+  scale_fill_manual(name = "Age classes", labels = c("Spat", "Half-grown"), values = c("#EE3B3B", "#1C86EE")) +
+  scale_color_manual(name = "Age classes", labels = c("Spat", "Half-grown"), values = c("#EE3B3B", "#1C86EE")) +
+  theme(legend.position = "none")
+
+Table_growth_validaion <- ggarrange(N0_growth_Table, J1_growth_Table, ncol = 2)
+model_growth_validation <- ggarrange(model_selection_growth, Table_growth_validaion, ncol = 1, heights = c(1, 0.35))
+
+# For death
+N0_death_model_stack2$species <- rep("Spat")
+J1_death_model_stack2$species <- rep("Half-grown")
+death_model_stack <- rbind(N0_death_model_stack2, J1_death_model_stack2)
+death_model_stack$species <- as.factor(death_model_stack$species)
+death_model_stack$species <- relevel(death_model_stack$species, ref = "Spat")
+
+death_aic_median <- death_model_stack %>%
+  group_by(model, species) %>%
+  summarise(median_aic = median(aic), count = n()) %>%
+  ungroup()
+
+model_selection_death <- ggplot() +
+  geom_histogram(data = death_model_stack, aes(aic, fill = species), alpha = 0.5, col = "black", bins = 60) +
+  geom_vline(data = death_aic_median, aes(xintercept = median_aic), linetype = "dashed") +
+  theme_graphic() +
+  ylab("Count") +
+  xlab("AIC score") +
+  ggtitle("b. Mortality") +
+  geom_text(data = death_aic_median, aes(
+    col = species, label = paste("Median AIC =", round(median_aic, 1)),
+    x = c(-1500, -1850, -1500, -1850), y = 100
+  ), vjust = "inward", hjust = "inward") +
+  facet_grid(model ~ species, scales = "free") +
+  scale_fill_manual(name = "Age classes", labels = c("Spat", "Half-grown"), values = c("#EE3B3B", "#1C86EE")) +
+  scale_color_manual(name = "Age classes", labels = c("Spat", "Half-grown"), values = c("#EE3B3B", "#1C86EE")) +
+  theme(legend.position = "none")
+
+Table_death_validation <- ggarrange(N0_death_Table, J1_death_Table, ncol = 2)
+
+model_death_validation <- ggarrange(model_selection_death, Table_death_validation, ncol = 1, heights = c(1, 0.35))
+
+# Merge the plot of growth and death
+Table_validation_complete <- ggarrange(model_growth_validation, model_death_validation, nrow = 2)
+Table_validation_complete
+ggsave(here::here("figs/Fig7_model_validation.png"), Table_validation_complete, width = 210, height = 250, dpi = 400, units = c("mm"))
+```
+
+```{r}
+# We now save the prediction
+N0_J1_growth_preds <- N0_J1_growth_preds %>%
+  select(-zone_fr) %>%
+  rename("mass_pred" = ".fitted")
+
+N0_J1_death_preds <- N0_J1_death_preds %>%
+  select(-model, -zone_fr) %>%
+  rename("CM_pred" = ".fitted")
+
+complete_pred <- full_join(N0_J1_death_preds, N0_J1_growth_preds, by = c("site", "campaign", "date_jj", "classe_age", "num", "name", "zone_en", "lat", "long"))
+
+complete_pred$mass_pred <- formattable(complete_pred$mass_pred, digits = 2, format = "f")
+complete_pred$CM_pred <- formattable(complete_pred$CM_pred, digits = 3, format = "f")
+
+# reorder column
+complete_pred <- complete_pred[, c(6,1,7,8,9,10,2,5,3,4,11)]
+
+write.csv(complete_pred, here::here("data/clean/DataResco_predicted.csv"), row.names = FALSE, quote = TRUE, na = "NA")
+# This data set is available on Zenodo (10.5281/zenodo.5744977)
+```
+
+```{r echo=FALSE}
+sessionInfo()
+```
