@@ -37,13 +37,13 @@ TAB <- TAB[, c(30, 3, 2, 17, 18, 9, 8, 23, 22, 28, 25, 26, 29, 32, 19, 12, 14, 1
 
 # We rename the columns
 colnames(TAB) <- c(
-  "program", "mnemonic_site", "site", "classe_age", "ploidy", "date", "mnemonic_passage", "param", "code_param",
-  "unit_measure", "fraction", "method", "id_ind", "value", "mnemonic_prelevement", "long", "lat", "pop_init_batch"
+  "program", "mnemonic_site", "site", "class_age", "ploidy", "date", "mnemonic_date", "param", "code_param",
+  "unit_measure", "fraction", "method", "id_ind", "value", "mnemonic_sampling", "long", "lat", "pop_init_batch"
 )
 
 # We transform some variables into factors
 cols_to_make_factor <- TAB %>%
-  select(-date, -value, -lat, long, -mnemonic_prelevement, -pop_init_batch) %>%
+  select(-date, -value, -lat, long, -mnemonic_sampling, -pop_init_batch) %>%
   colnames()
 
 TAB <- TAB %>% mutate_at(cols_to_make_factor, factor)
@@ -67,26 +67,26 @@ TAB <- TAB %>%
 TAB$campaign <- as.factor(TAB$campaign)
 rm(stock)
 
-# Creation of the column origin of the initial spat group: "naissain" ==> 2 levels:
-# "CAPT" = wildcaught, "ECLO" = hatchery
-TAB$naissain <- "CAPT"
-TAB[which(substr(TAB$pop_init_batch, 9, 10) %in% c("ET", "NS")), "naissain"] <- "ECLO"
-TAB$naissain <- as.factor(TAB$naissain)
+# Creation of the column origin of the initial spat group: "spat" ==> 2 levels:
+# "WILD" = wildcaught, "HATCH" = hatchery
+TAB$spat <- "WILD"
+TAB[which(substr(TAB$pop_init_batch, 9, 10) %in% c("ET", "NS")), "spat"] <- "HATCH"
+TAB$spat <- as.factor(TAB$spat)
 
-# Recoding birthplace of the initial spat group: "site_nais" ==> 8 levels:
+# Recoding birthplace of the initial spat group: "site_spat" ==> 8 levels:
 # "AR" = Bay of Arcachon, "BO" = Bay of Bourgneuf, "MO" = Pertuis d'Antioche/Bay of Marennes-Oléron,
 # "E1" = Hatchery 1, "E2" = Hatchery 2, "E3" = Hatchery 3, "E4" = Ifremer Hatchery of Argenton,
 # "ME" = Mix of several batches
-TAB$site_nais <- NA
-TAB[which(TAB$naissain == "CAPT"), "site_nais"] <- "AR"
-TAB[which(substr(TAB$pop_init_batch, 14, 15) == "BO"), "site_nais"] <- "BO"
-TAB[which(substr(TAB$pop_init_batch, 14, 15) == "MO"), "site_nais"] <- "MO"
-TAB[which(substr(TAB$pop_init_batch, 9, 10) == "NS"), "site_nais"] <- "E4"
-TAB[which(substr(TAB$pop_init_batch, 14, 15) == "GO"), "site_nais"] <- "E1"
-TAB[which(substr(TAB$pop_init_batch, 14, 15) == "FT"), "site_nais"] <- "E3"
-TAB[which(substr(TAB$pop_init_batch, 14, 15) == "VN"), "site_nais"] <- "E2"
-TAB[which(substr(TAB$pop_init_batch, 14, 15) == "Me"), "site_nais"] <- "ME"
-TAB$site_nais <- as.factor(TAB$site_nais)
+TAB$site_spat <- NA
+TAB[which(TAB$spat == "WILD"), "site_spat"] <- "AR"
+TAB[which(substr(TAB$pop_init_batch, 14, 15) == "BO"), "site_spat"] <- "BO"
+TAB[which(substr(TAB$pop_init_batch, 14, 15) == "MO"), "site_spat"] <- "MO"
+TAB[which(substr(TAB$pop_init_batch, 9, 10) == "NS"), "site_spat"] <- "E4"
+TAB[which(substr(TAB$pop_init_batch, 14, 15) == "GO"), "site_spat"] <- "E1"
+TAB[which(substr(TAB$pop_init_batch, 14, 15) == "FT"), "site_spat"] <- "E3"
+TAB[which(substr(TAB$pop_init_batch, 14, 15) == "VN"), "site_spat"] <- "E2"
+TAB[which(substr(TAB$pop_init_batch, 14, 15) == "Me"), "site_spat"] <- "ME"
+TAB$site_spat <- as.factor(TAB$site_spat)
 
 # Removing of the locations that only appear after 2019
 stock <- levels(TAB$site)[c(2, 3, 4, 5, 7, 9, 10, 11, 12, 13, 15, 17, 18)] # These are our 13 sites
@@ -108,33 +108,33 @@ levels(TAB$ploidy) <- c("2n", "3n")
 
 # Creating a column "batch". One batch is a group of individuals born during one reproductive event in the wild
 # [wildcaught spat] or in hatchery having followed the same zoo technical path.
-# Each batch can be identified by aggregating "campaign","classe_age", "naissain", "ploidy" and "site_nais"
-TAB$batch <- as.factor(paste(TAB$campaign, TAB$classe_age, TAB$naissain, TAB$ploidy, TAB$site_nais, sep = "_"))
+# Each batch can be identified by aggregating "campaign","class_age", "spat", "ploidy" and "site_spat"
+TAB$batch <- as.factor(paste(TAB$campaign, TAB$class_age, TAB$spat, TAB$ploidy, TAB$site_spat, sep = "_"))
 
 # From 2009 to 2014, different batches of spat were monitored in each site. Some of them have a similar background
 # than the spat batches monitored before 2009 (i.e. wild-caught spat from natural spatfall in Bay of Arcachon),
 # others have not. We need to eliminate the others in order to not bias the results.
-batch_to_remove <- as.data.frame(as.factor(unique(TAB[which(TAB$campaign %in% 2009:2014 & TAB$classe_age == "N0" &
-  substr(TAB$batch, 6, 18) != "N0_CAPT_2n_AR"), "batch"])))
+batch_to_remove <- as.data.frame(as.factor(unique(TAB[which(TAB$campaign %in% 2009:2014 & TAB$class_age == "N0" &
+  substr(TAB$batch, 6, 18) != "N0_WILD_2n_AR"), "batch"])))
 
 colnames(batch_to_remove)[1] <- "batch"
 to_remove <- TAB %>% filter(batch %in% batch_to_remove$batch)
 TAB <- anti_join(TAB, to_remove)
 rm(batch_to_remove, to_remove)
 
-# We only keep the data collected the year the oysters were installed (i.e., julian day <= 365)
+# We only keep the data collected the year the oysters were installed (i.e., DOY <= 365)
 TAB <- TAB %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(TAB$campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
-  filter(date_jj <= 365) %>%
-  select(-date_jj)
+  mutate(DOY = julian(date) - julian(as.Date(paste(TAB$campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  filter(DOY <= 365) %>%
+  select(-DOY)
 
-# We only keep spat (classe_age = N0) and half-grown oysters (classe_age = J1).
+# We only keep spat (class_age = N0) and half-grown oysters (class_age = J1).
 TAB <- TAB %>%
-  filter(classe_age == "N0" | classe_age == "J1")
+  filter(class_age == "N0" | class_age == "J1")
 
-# Some "mnemonic prelevement" codes are unusual in BREST 2009_N0_CAPT_2n_AR". Some batches are identified ISO.
+# Some "mnemonic prelevement" codes are unusual in BREST 2009_N0_WILD_2n_AR". Some batches are identified ISO.
 # We remove those data
-batchISO <- TAB %>% filter(str_detect(mnemonic_prelevement, "ISO"))
+batchISO <- TAB %>% filter(str_detect(mnemonic_sampling, "ISO"))
 TAB <- anti_join(TAB, batchISO)
 rm(batchISO)
 
@@ -154,13 +154,13 @@ bag_data <- droplevels(subset(TAB, TAB$code_param != "INDVPOID"))
 
 # In 1995, INDMORNB in GEFOSS for N0 is always 0. 
 bag_data %>%
-  filter(batch == "1995_N0_CAPT_2n_AR" & site == "GEFOS" & code_param != "TOTVIVPOI") %>%
+  filter(batch == "1995_N0_WILD_2n_AR" & site == "GEFOS" & code_param != "TOTVIVPOI") %>%
   View()
 # this is inconsistent with the REMORA report. According to that report, there was approximately 5% of mortality that
 # year at that site. As we do not know if it is the INDVVIVNB or the INDVMORNB that is incorrect (which might affect 
 # the mass), we delete all data for that site x classe age x year combination.
 to_remove <- bag_data %>%
-  filter(batch == "1995_N0_CAPT_2n_AR" & site == "GEFOS")
+  filter(batch == "1995_N0_WILD_2n_AR" & site == "GEFOS")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
@@ -220,26 +220,26 @@ bag_data %>%
 
 
 # We check those issues one by one:
-# 2008_J1_CAPT_2n_AR CANCA: INDVMORNB data is missing on 2008-04-08
+# 2008_J1_WILD_2n_AR CANCA: INDVMORNB data is missing on 2008-04-08
 bag_data %>%
-  filter(batch == "2008_J1_CAPT_2n_AR" & site == "CANCA") %>%
+  filter(batch == "2008_J1_WILD_2n_AR" & site == "CANCA") %>%
   arrange(date) %>%
   View()
 # There is only 1 data for this site and year combination. We remove this data.
-to_remove <- bag_data %>% filter(batch == "2008_J1_CAPT_2n_AR" & site == "CANCA")
+to_remove <- bag_data %>% filter(batch == "2008_J1_WILD_2n_AR" & site == "CANCA")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
-# 2008_N0_CAPT_2n_AR AGNAS: INDVIVMORNB is missing on 2008-06-03
+# 2008_N0_WILD_2n_AR AGNAS: INDVIVMORNB is missing on 2008-06-03
 bag_data %>%
-  filter(batch == "2008_N0_CAPT_2n_AR" & site == "AGNAS" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2008_N0_WILD_2n_AR" & site == "AGNAS" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
   mutate(diff_dead_alive = INDVMORNB - INDVVIVNB)
 
 bag_data %>%
-  filter(batch == "2008_N0_CAPT_2n_AR" & site == "AGNAS") %>%
+  filter(batch == "2008_N0_WILD_2n_AR" & site == "AGNAS") %>%
   arrange(date) %>%
   View()
 # INDVMORNB is missing on 2008-06-03. Without this data, we can't calculate the cumulative mortality at that date. 
@@ -251,73 +251,73 @@ bag_data %>%
 # There was no RESCO report for this year. We thus can't check if oysters were removed from the bag.
 # We thus remove all data from that batch x site x year combination (including TOTVIVPOI data since there are only 3).
 to_remove <- bag_data %>%
-  filter(batch == "2008_N0_CAPT_2n_AR" & site == "AGNAS")
+  filter(batch == "2008_N0_WILD_2n_AR" & site == "AGNAS")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
-# 2008_N0_CAPT_2n_AR LOIXR: INDVMORNB is missing on 2008-06-02
+# 2008_N0_WILD_2n_AR LOIXR: INDVMORNB is missing on 2008-06-02
 bag_data %>%
-  filter(batch == "2008_N0_CAPT_2n_AR" & site == "LOIXR" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2008_N0_WILD_2n_AR" & site == "LOIXR" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
   mutate(diff_dead_alive = INDVMORNB - INDVVIVNB)
 
 bag_data %>%
-  filter(batch == "2008_N0_CAPT_2n_AR" & site == "LOIXR") %>%
+  filter(batch == "2008_N0_WILD_2n_AR" & site == "LOIXR") %>%
   arrange(date) %>%
   View()
 # Same issue as the previous batch x site x year combination.
 # We delete those data (including the TOTVIVPOID since there are only 2 data)
 to_remove <- bag_data %>%
-  filter(batch == "2008_N0_CAPT_2n_AR" & site == "LOIXR")
+  filter(batch == "2008_N0_WILD_2n_AR" & site == "LOIXR")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2009_J1_CAPT_2n_AR MARSE issue on date 2009-05-25 and 2009-09-21
+# 2009_J1_WILD_2n_AR MARSE issue on date 2009-05-25 and 2009-09-21
 bag_data %>%
-  filter(batch == "2009_J1_CAPT_2n_AR" & site == "MARSE") %>%
+  filter(batch == "2009_J1_WILD_2n_AR" & site == "MARSE") %>%
   arrange(date) %>%
   View()
 # Some bag identified NA have the same values than bag identified with another id_ind.
 # These id_ind NA seems to be duplicated values for bags 7, 8, 9. We remove those NAs.
-to_remove <- bag_data %>% filter(batch == "2009_J1_CAPT_2n_AR" & site == "MARSE" & is.na(id_ind) == TRUE)
+to_remove <- bag_data %>% filter(batch == "2009_J1_WILD_2n_AR" & site == "MARSE" & is.na(id_ind) == TRUE)
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2009_N0_CAPT_2n_AR MARSE
+# 2009_N0_WILD_2n_AR MARSE
 bag_data %>%
-  filter(batch == "2009_N0_CAPT_2n_AR" & site == "MARSE") %>%
+  filter(batch == "2009_N0_WILD_2n_AR" & site == "MARSE") %>%
   arrange(date, value) %>%
   View()
 # Same issue as the previous batch x site x year combination.
 # some bags are identified NAs and are duplicated values of identified bags
 # On date 2009-09-21, there are only NAs but the data don't corresponds to INDVIVNB data at the previous date.
 # We remove all NAs
-to_remove <- bag_data %>% filter(batch == "2009_N0_CAPT_2n_AR" & site == "MARSE" & is.na(id_ind) == TRUE)
+to_remove <- bag_data %>% filter(batch == "2009_N0_WILD_2n_AR" & site == "MARSE" & is.na(id_ind) == TRUE)
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2010_J1_CAPT_2n_AR BLAIN: INDVMORNB is missing on 2010-06-16
+# 2010_J1_WILD_2n_AR BLAIN: INDVMORNB is missing on 2010-06-16
 bag_data %>%
-  filter(batch == "2010_J1_CAPT_2n_AR" & site == "BLAIN" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2010_J1_WILD_2n_AR" & site == "BLAIN" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
   mutate(diff_dead_alive = INDVMORNB - INDVVIVNB)
 
 bag_data %>%
-  filter(batch == "2010_J1_CAPT_2n_AR" & site == "BLAIN") %>%
+  filter(batch == "2010_J1_WILD_2n_AR" & site == "BLAIN") %>%
   arrange(date) %>%
   View()
 # Several issues here. On 2010-06-16, there is one bag identified id_ind = 1 and another one with id_ind = NA.
 # However, id_ind = 2 and 3 were sampled before and after that date. There is also on id_ind = NA on seeding date.
 # First, We remove the NAs
 to_remove <- bag_data %>%
-  filter(batch == "2010_J1_CAPT_2n_AR" & site == "BLAIN" & is.na(id_ind) == TRUE)
+  filter(batch == "2010_J1_WILD_2n_AR" & site == "BLAIN" & is.na(id_ind) == TRUE)
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 # As there is no data for bag 2 and 3 on date 2010-06-16 and dead oysters may have been taken away from these bags
@@ -326,15 +326,15 @@ rm(to_remove)
 # Second, we delete the INDVMORNB for bags 2 and 3 after 2010-06-16. We keep the INDVIVNB data to be able to calculate
 # the mean mass of individuals.
 to_remove <- bag_data %>%
-  filter(batch == "2010_J1_CAPT_2n_AR" & site == "BLAIN" & code_param == "INDVMORNB" & id_ind != "1" &
+  filter(batch == "2010_J1_WILD_2n_AR" & site == "BLAIN" & code_param == "INDVMORNB" & id_ind != "1" &
     date > "2010-06-16")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2010_N0_CAPT_2n_AR AGNAS
+# 2010_N0_WILD_2n_AR AGNAS
 bag_data %>%
-  filter(batch == "2010_N0_CAPT_2n_AR" & site == "AGNAS" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2010_N0_WILD_2n_AR" & site == "AGNAS" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
@@ -343,20 +343,20 @@ bag_data %>%
 # 1- the number of bags followed through the year vary
 # 2- the number of INDVVIVNB and INDVMORNB data are not the same on 2010-04-27
 bag_data %>%
-  filter(batch == "2010_N0_CAPT_2n_AR" & site == "AGNAS") %>%
+  filter(batch == "2010_N0_WILD_2n_AR" & site == "AGNAS") %>%
   arrange(date) %>%
   View()
 # Bags 2 and 3 are not sampled after the seeding date (except on 2010-06-14).
 # We removed data from bag 2 and 3 to only keep data from id_ind =="1".
 to_remove <- bag_data %>%
-  filter(batch == "2010_N0_CAPT_2n_AR" & site == "AGNAS" & id_ind != "1")
+  filter(batch == "2010_N0_WILD_2n_AR" & site == "AGNAS" & id_ind != "1")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2010_N0_CAPT_2n_AR LETES
+# 2010_N0_WILD_2n_AR LETES
 bag_data %>%
-  filter(batch == "2010_N0_CAPT_2n_AR" & site == "LETES" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2010_N0_WILD_2n_AR" & site == "LETES" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
@@ -365,36 +365,36 @@ bag_data %>%
 # 1- the number of bags followed through the year vary
 # 2- the number of INDVVIVNB and INDVMORNB data are not the same on dates 2010-04-26 and 2010-06-28
 bag_data %>%
-  filter(batch == "2010_N0_CAPT_2n_AR" & site == "LETES" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2010_N0_WILD_2n_AR" & site == "LETES" & !code_param == "TOTVIVPOI") %>%
   arrange(date) %>%
   View()
 # We only keep data from bag 1 because it was followed the all year
 to_remove <- bag_data %>%
-  filter(batch == "2010_N0_CAPT_2n_AR" & site == "LETES" & id_ind != "1")
+  filter(batch == "2010_N0_WILD_2n_AR" & site == "LETES" & id_ind != "1")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2011_N0_CAPT_2n_AR the issues is the same in BLAIN, AGNAS, GEFOS, LARMO, LOIXR:
+# 2011_N0_WILD_2n_AR the issues is the same in BLAIN, AGNAS, GEFOS, LARMO, LOIXR:
 # the bag 1 is followed the all year, whereas, there are INDVVIVNB data for bag 2 and 3 popping up at the seeding date.
 # We remove data from bag 2 and 3.
 to_remove <- bag_data %>%
   group_by(batch, site, code_param, date) %>%
-  filter(batch == "2011_N0_CAPT_2n_AR" &
+  filter(batch == "2011_N0_WILD_2n_AR" &
     (site == "BLAIN" | site == "AGNAS" | site == "GEFOS" | site == "LARMO" | site == "LOIXR") & id_ind != "1")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2012_J1_CAPT_2n_AR MARSE on date 2012-02-21
+# 2012_J1_WILD_2n_AR MARSE on date 2012-02-21
 bag_data %>%
-  filter(batch == "2012_J1_CAPT_2n_AR" & site == "MARSE" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2012_J1_WILD_2n_AR" & site == "MARSE" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
   mutate(diff_dead_alive = INDVMORNB - INDVVIVNB)
 bag_data %>%
-  filter(batch == "2012_J1_CAPT_2n_AR" & site == "MARSE") %>%
+  filter(batch == "2012_J1_WILD_2n_AR" & site == "MARSE") %>%
   arrange(date) %>%
   View()
 # There are several issues:
@@ -403,59 +403,59 @@ bag_data %>%
 # 3- On date 2012-11-12 there is an INDVMORNB data missing for bag 6.
 # To address those issues, we first remove the wrong INDVVIVNB value at seeding date
 to_remove <- bag_data %>%
-  filter(batch == "2012_J1_CAPT_2n_AR" & site == "MARSE" & date == "2012-02-21" & code_param == "INDVVIVNB")
+  filter(batch == "2012_J1_WILD_2n_AR" & site == "MARSE" & date == "2012-02-21" & code_param == "INDVVIVNB")
 bag_data <- anti_join(bag_data, to_remove)
 # We then copy the rows for INDVVIVNB on date 2012-03-09. We replace the value with 50 and date with 2012-02-21
 # (i.e. INDVVIVNB = 50 at seeding date)
 to_add <- bag_data %>%
-  filter(batch == "2012_J1_CAPT_2n_AR" & site == "MARSE" & date == "2012-03-09" & code_param == "INDVVIVNB") %>%
+  filter(batch == "2012_J1_WILD_2n_AR" & site == "MARSE" & date == "2012-03-09" & code_param == "INDVVIVNB") %>%
   mutate(value = as.numeric("50"), date = as.Date("2012-02-21"))
 bag_data <- rbind(bag_data, to_add)
 rm(to_add, to_remove)
 # Accordingly the TOTVIVPI at seeding date is also wrong we remove it (it was for bags with INDVVIVNB =  300)
 to_remove <- bag_data %>%
-  filter(batch == "2012_J1_CAPT_2n_AR" & site == "MARSE" & date == "2012-02-21" & code_param == "TOTVIVPOI")
+  filter(batch == "2012_J1_WILD_2n_AR" & site == "MARSE" & date == "2012-02-21" & code_param == "TOTVIVPOI")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 # INDVMORNB is missing for id_ind = 6 on 2012-11-12. INDVVIVNB = 36 at that visit and INDVMORNB = 0 and INDVVIVNB = 36
 # at the next visit.
 # We thus add an INDVMORNB = 0 on date 2012-11-12
 to_add <- bag_data %>%
-  filter(batch == "2012_J1_CAPT_2n_AR" & site == "MARSE" & date == "2012-11-12" & code_param == "INDVVIVNB" &
+  filter(batch == "2012_J1_WILD_2n_AR" & site == "MARSE" & date == "2012-11-12" & code_param == "INDVVIVNB" &
     id_ind == "6") %>%
   mutate(value = as.numeric("0"), code_param = as.factor("INDVMORNB"))
 bag_data <- rbind(bag_data, to_add)
 rm(to_add)
 # From 2012-09-17, only 12 out of the 18 bags have been followed and that's ok !
 
-# 2013_J1_CAPT_2n_AR GEFOS: on date 2013-06-11
+# 2013_J1_WILD_2n_AR GEFOS: on date 2013-06-11
 bag_data %>%
-  filter(batch == "2013_J1_CAPT_2n_AR" & site == "GEFOS" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2013_J1_WILD_2n_AR" & site == "GEFOS" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
   mutate(diff_dead_alive = INDVMORNB - INDVVIVNB)
 bag_data %>%
-  filter(batch == "2013_J1_CAPT_2n_AR" & site == "GEFOS") %>%
+  filter(batch == "2013_J1_WILD_2n_AR" & site == "GEFOS") %>%
   arrange(date) %>%
   View()
 # 3 bag with id_ind=NA were added on date 2013-06-11
 # We delete those bags
 to_remove <- bag_data %>%
-  filter(batch == "2013_J1_CAPT_2n_AR" & site == "GEFOS" & is.na(id_ind) == "TRUE")
+  filter(batch == "2013_J1_WILD_2n_AR" & site == "GEFOS" & is.na(id_ind) == "TRUE")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2013_J1_CAPT_2n_AR MORLX
+# 2013_J1_WILD_2n_AR MORLX
 bag_data %>%
-  filter(batch == "2013_J1_CAPT_2n_AR" & site == "MORLX" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2013_J1_WILD_2n_AR" & site == "MORLX" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
   mutate(diff_dead_alive = INDVMORNB - INDVVIVNB)
 bag_data %>%
-  filter(batch == "2013_J1_CAPT_2n_AR" & site == "MORLX") %>%
+  filter(batch == "2013_J1_WILD_2n_AR" & site == "MORLX") %>%
   arrange(date) %>%
   View()
 # On dates 2013-09-20 and 2013-08-10, INDVMORNB is indicated for one bag (id_ind=="1"), whereas, INDVVIVNB is indicated
@@ -463,58 +463,58 @@ bag_data %>%
 # We remove INDVMORNB data from bag 2 and 3 when date > "2013-09-06" but keep INDVVIVNB data to later calculate
 # the mean mass of individuals
 to_remove <- bag_data %>%
-  filter(batch == "2013_J1_CAPT_2n_AR" & site == "MORLX" & code_param == "INDVMORNB" & id_ind != "1" &
+  filter(batch == "2013_J1_WILD_2n_AR" & site == "MORLX" & code_param == "INDVMORNB" & id_ind != "1" &
     date > "2013-09-06")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2013_N0_CAPT_2n_AR GEFOS on date 2013-12-02
+# 2013_N0_WILD_2n_AR GEFOS on date 2013-12-02
 bag_data %>%
-  filter(batch == "2013_N0_CAPT_2n_AR" & site == "GEFOS" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2013_N0_WILD_2n_AR" & site == "GEFOS" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
   mutate(diff_dead_alive = INDVMORNB - INDVVIVNB)
 bag_data %>%
-  filter(batch == "2013_N0_CAPT_2n_AR" & site == "GEFOS") %>%
+  filter(batch == "2013_N0_WILD_2n_AR" & site == "GEFOS") %>%
   arrange(date) %>%
   View()
 # There is an additional bag with id_ind ==NA on 2013-12-02. This is a duplicated row from a bag with an id_ind
 # we remove this bag
 to_remove <- bag_data %>%
-  filter(batch == "2013_N0_CAPT_2n_AR" & site == "GEFOS" & is.na(id_ind) == TRUE)
+  filter(batch == "2013_N0_WILD_2n_AR" & site == "GEFOS" & is.na(id_ind) == TRUE)
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2014_N0_CAPT_2n_AR MORLX on date 2014-05-26
+# 2014_N0_WILD_2n_AR MORLX on date 2014-05-26
 bag_data %>%
-  filter(batch == "2014_N0_CAPT_2n_AR" & site == "MORLX" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2014_N0_WILD_2n_AR" & site == "MORLX" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
   mutate(diff_dead_alive = INDVMORNB - INDVVIVNB) #
 bag_data %>%
-  filter(batch == "2014_N0_CAPT_2n_AR" & site == "MORLX" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2014_N0_WILD_2n_AR" & site == "MORLX" & !code_param == "TOTVIVPOI") %>%
   arrange(date) %>%
   View()
 # On date 2014-05-26, two bags are identified id_ind=="1" with INDVVIVNB = 288 or 282. On this date, INDVMORNB = 2.
 # At the previous visit, INDVVIV = 290. Then it makes more sense to keep the bag INDVVIVNB = 288 on date 2014-05-26.
 # We remove the bag INDVVIVNB = 282.
 to_remove <- bag_data %>%
-  filter(batch == "2014_N0_CAPT_2n_AR" & site == "MORLX" & date == "2014-05-26" & id_ind == "1" &
+  filter(batch == "2014_N0_WILD_2n_AR" & site == "MORLX" & date == "2014-05-26" & id_ind == "1" &
     code_param == "INDVVIVNB" & value == "282")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 # We also remove TOTVIVPOI data on 2014-05-26 as there are 2 bags id_ind 1, 2 bags id_ind = 2 and 2 bags id_ind =3
 to_remove <- bag_data %>%
-  filter(batch == "2014_N0_CAPT_2n_AR" & site == "MORLX" & date == "2014-05-26" & code_param == "TOTVIVPOI")
+  filter(batch == "2014_N0_WILD_2n_AR" & site == "MORLX" & date == "2014-05-26" & code_param == "TOTVIVPOI")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 # INDVVIVNB at seeding date (2014-03-18) is also missing for id_ind = 2 and 3
 to_add <- bag_data %>%
-  filter(batch == "2014_N0_CAPT_2n_AR" & site == "MORLX" & date == "2014-03-18" & code_param == "INDVVIVNB") %>%
+  filter(batch == "2014_N0_WILD_2n_AR" & site == "MORLX" & date == "2014-03-18" & code_param == "INDVVIVNB") %>%
   slice(rep(1:n(), each = 2)) %>%
   mutate(id_ind = as.factor(c("2", "3")))
 bag_data <- rbind(bag_data, to_add)
@@ -535,9 +535,9 @@ bag_data %>%
 # Thus, we have solved all issues regarding a larger number of INDVVIVNB data than INDVMORNB data.
 
 # Let's check the issues related to a larger number of INDVMORNB than INDVVIVNB data.
-# For the classe_age = N0:
+# For the class_age = N0:
 bag_data %>%
-  filter(classe_age == "N0" & !code_param == "TOTVIVPOI") %>%
+  filter(class_age == "N0" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, date, code_param) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
@@ -545,16 +545,16 @@ bag_data %>%
   filter(diff_dead_alive > 0)
 # There are 19 issues.
 
-# 2008_N0_CAPT_2n_AR COUPE
+# 2008_N0_WILD_2n_AR COUPE
 bag_data %>%
-  filter(batch == "2008_N0_CAPT_2n_AR" & site == "COUPE") %>%
+  filter(batch == "2008_N0_WILD_2n_AR" & site == "COUPE") %>%
   arrange(date) %>%
   View()
 # The id_ind vary through the year. There are INDVIVMORNB and INDVVIVNB data for bag id_ind =="1" at seeding date
 # but then id_ind is NA (and there is no INDVIVNB data for id_ind = NA at seeding date).
 # We first remove the data with id_ind =="1"
 to_remove <- bag_data %>%
-  filter(batch == "2008_N0_CAPT_2n_AR" & site == "COUPE" & id_ind == "1")
+  filter(batch == "2008_N0_WILD_2n_AR" & site == "COUPE" & id_ind == "1")
 bag_data <- anti_join(bag_data, to_remove)
 # The we add INDVIVNB data for id_ind== NA at seeding date.
 to_add <- to_remove %>%
@@ -564,9 +564,9 @@ bag_data <- rbind(bag_data, to_add)
 rm(to_remove, to_add)
 
 
-# 2008_N0_CAPT_2n_AR BREST
+# 2008_N0_WILD_2n_AR BREST
 bag_data %>%
-  filter(batch == "2008_N0_CAPT_2n_AR" & site == "BREST") %>%
+  filter(batch == "2008_N0_WILD_2n_AR" & site == "BREST") %>%
   arrange(date) %>%
   View()
 # Issues on dates 2008-04-07, 2008-04-07 and 2008-12-12. There are data with id_ind =="1" popping-up through the year.
@@ -576,57 +576,57 @@ bag_data %>%
 # (INDVVIVNB + INDVMORNB) will be larger than INDVVIVNB at the previous visit.
 # We thus remove all data with id_ind = 1 except those equal to 2 and 43
 to_remove <- bag_data %>%
-  filter(batch == "2008_N0_CAPT_2n_AR" & id_ind == "1" & !(value == "43" | value == "2"))
+  filter(batch == "2008_N0_WILD_2n_AR" & id_ind == "1" & !(value == "43" | value == "2"))
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 # Then on 2008-08-29 and 2008-12-12, we remove INDVMORNB data with id_ind = NA
 to_remove <- bag_data %>%
-  filter(batch == "2008_N0_CAPT_2n_AR" & site == "BREST" & is.na(id_ind) == TRUE & code_param == "INDVMORNB" &
+  filter(batch == "2008_N0_WILD_2n_AR" & site == "BREST" & is.na(id_ind) == TRUE & code_param == "INDVMORNB" &
     (date == "2008-08-29" | date == "2008-12-12"))
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 # We then replace the id_ind = 1 by id_ind = NA
 bag_data <- bag_data %>%
-  mutate(id_ind = replace(id_ind, batch == "2008_N0_CAPT_2n_AR" & site == "BREST" & id_ind == "1", NA))
+  mutate(id_ind = replace(id_ind, batch == "2008_N0_WILD_2n_AR" & site == "BREST" & id_ind == "1", NA))
 
 
-# 2009_N0_CAPT_2n_AR BLAIN and CANCA,
-# 2010_N0_CAPT_2n_AR CANCA AND GEFOSS
-# 2011_N0_CAPT_2n_AR PENRF
+# 2009_N0_WILD_2n_AR BLAIN and CANCA,
+# 2010_N0_WILD_2n_AR CANCA AND GEFOSS
+# 2011_N0_WILD_2n_AR PENRF
 bag_data %>%
-  filter(batch == "2009_N0_CAPT_2n_AR" & (site == "BLAIN" | site == "CANCA")) %>%
+  filter(batch == "2009_N0_WILD_2n_AR" & (site == "BLAIN" | site == "CANCA")) %>%
   arrange(site, date) %>%
   View()
 bag_data %>%
-  filter(batch == "2010_N0_CAPT_2n_AR" & (site == "CANCA" | site == "GEFOS")) %>%
+  filter(batch == "2010_N0_WILD_2n_AR" & (site == "CANCA" | site == "GEFOS")) %>%
   arrange(site, date) %>%
   View()
 bag_data %>%
-  filter(batch == "2011_N0_CAPT_2n_AR" & site == "PENRF") %>%
+  filter(batch == "2011_N0_WILD_2n_AR" & site == "PENRF") %>%
   arrange(date) %>%
   View()
 # The issues are the same. Bags 2 and 3 sometimes pop-up. There are also id_ind = NA at GEFOS.
 # TOTVIVPOI data are not always associated with these bags and some of them are only followed at one or two dates
 # We delete the data with id_ind =2 and 3 to only keep the ones related to id_ind 1
 to_remove <- bag_data %>%
-  filter(batch == "2009_N0_CAPT_2n_AR" & (site == "BLAIN" | site == "CANCA") & id_ind != "1")
+  filter(batch == "2009_N0_WILD_2n_AR" & (site == "BLAIN" | site == "CANCA") & id_ind != "1")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 to_remove <- bag_data %>%
-  filter(batch == "2010_N0_CAPT_2n_AR" & (site == "CANCA" | site == "GEFOS") & (id_ind != "1" | is.na(id_ind) == TRUE))
+  filter(batch == "2010_N0_WILD_2n_AR" & (site == "CANCA" | site == "GEFOS") & (id_ind != "1" | is.na(id_ind) == TRUE))
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 to_remove <- bag_data %>%
-  filter(batch == "2011_N0_CAPT_2n_AR" & site == "PENRF" & id_ind != "1")
+  filter(batch == "2011_N0_WILD_2n_AR" & site == "PENRF" & id_ind != "1")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2012_N0_CAPT_2n_AR MARSE
+# 2012_N0_WILD_2n_AR MARSE
 bag_data %>%
-  filter(batch == "2012_N0_CAPT_2n_AR" & site == "MARSE" & code_param != "TOTVIVPOI") %>%
+  filter(batch == "2012_N0_WILD_2n_AR" & site == "MARSE" & code_param != "TOTVIVPOI") %>%
   arrange(date) %>%
   View()
 # there are several issues:
@@ -634,7 +634,7 @@ bag_data %>%
 # 2- INDVVIVNB at seeding date is wrong. INDVIVNB = 50 not 300 (according to INDVIVNB and INDMORNB at the next visit)
 # First, we remove the wrong data at the seeding date
 to_remove <- bag_data %>%
-  filter(batch == "2012_N0_CAPT_2n_AR" & site == "MARSE" & code_param == "INDVVIVNB" & date == "2012-02-21")
+  filter(batch == "2012_N0_WILD_2n_AR" & site == "MARSE" & code_param == "INDVVIVNB" & date == "2012-02-21")
 bag_data <- anti_join(bag_data, to_remove)
 # Then we add the correct ones for the 6 bags
 to_modify <- to_remove %>%
@@ -644,11 +644,11 @@ bag_data <- rbind(bag_data, to_modify)
 rm(to_remove, to_modify)
 
 
-# 2014_N0_CAPT_2n_AR (except MORLX, no data at QUIBE)
+# 2014_N0_WILD_2n_AR (except MORLX, no data at QUIBE)
 # On seeding date, INDVMORNB is indicated for the 3 bags whereas INDVVIVNB is only indicated for bag 1.
 # The issue is the same for J1. We thus add INDVIVNB data for both N0 and J1.
 to_add <- bag_data %>%
-  filter(campaign == "2014" & code_param == "INDVMORNB" & classe_age == "N0"& date == "2014-03-18" & id_ind != "1" &
+  filter(campaign == "2014" & code_param == "INDVMORNB" & class_age == "N0"& date == "2014-03-18" & id_ind != "1" &
     site != "MORLX") %>%
   mutate(code_param = as.factor("INDVVIVNB"), value = as.numeric("300"))
 bag_data <- rbind(bag_data, to_add)
@@ -657,7 +657,7 @@ rm(to_add)
 
 # Let's see if we solved all the issues:
 bag_data %>%
-  filter(classe_age == "N0" & !code_param == "TOTVIVPOI") %>%
+  filter(class_age == "N0" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, date, code_param) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
@@ -665,9 +665,9 @@ bag_data %>%
   filter(diff_dead_alive > 0) # Yes we did !
 
 
-# Let's see the issues related to classe_age J1
+# Let's see the issues related to class_age J1
 bag_data %>%
-  filter(classe_age == "J1" & !code_param == "TOTVIVPOI") %>%
+  filter(class_age == "J1" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, date, code_param) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
@@ -675,33 +675,33 @@ bag_data %>%
   filter(diff_dead_alive > 0) # 29 issues !
 
 
-# 2008_J1_CAPT_2n_AR GEFOS on date 2008-04-03
+# 2008_J1_WILD_2n_AR GEFOS on date 2008-04-03
 bag_data %>%
-  filter(batch == "2008_J1_CAPT_2n_AR" & site == "GEFOS" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2008_J1_WILD_2n_AR" & site == "GEFOS" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
   mutate(diff_dead_alive = INDVMORNB - INDVVIVNB)
 bag_data %>%
-  filter(batch == "2008_J1_CAPT_2n_AR" & site == "GEFOS" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2008_J1_WILD_2n_AR" & site == "GEFOS" & !code_param == "TOTVIVPOI") %>%
   arrange(date) %>%
   View()
 # the id_ind=1 are duplicated of in_ind=="NA"
 # We remove the id_ind=1
 to_remove <- bag_data %>%
-  filter(batch == "2008_J1_CAPT_2n_AR" & site == "GEFOS" & id_ind == "1")
+  filter(batch == "2008_J1_WILD_2n_AR" & site == "GEFOS" & id_ind == "1")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
-# 2008_J1_CAPT_2n_AR BREST
+# 2008_J1_WILD_2n_AR BREST
 bag_data %>%
-  filter(batch == "2008_J1_CAPT_2n_AR" & site == "BREST" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2008_J1_WILD_2n_AR" & site == "BREST" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
   mutate(diff_dead_alive = INDVMORNB - INDVVIVNB)
 bag_data %>%
-  filter(batch == "2008_J1_CAPT_2n_AR" & site == "BREST" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2008_J1_WILD_2n_AR" & site == "BREST" & !code_param == "TOTVIVPOI") %>%
   arrange(date) %>%
   View()
 # Several issues:
@@ -710,7 +710,7 @@ bag_data %>%
 # 3- the number of bag followed through time vary
 # We first remove the NAs
 to_remove <- bag_data %>%
-  filter(batch == "2008_J1_CAPT_2n_AR" & site == "BREST" & is.na(id_ind) == TRUE)
+  filter(batch == "2008_J1_WILD_2n_AR" & site == "BREST" & is.na(id_ind) == TRUE)
 bag_data <- anti_join(bag_data, to_remove)
 # Then we add the data at seeding date
 to_add <- to_remove %>%
@@ -722,22 +722,22 @@ rm(to_add, to_remove)
 # on dates 2008-07-22, 2008-11-12 and 2008-12-12, the bag 3 was not followed. We thus delete INDVMORNB for bag 3 after
 # 2008-07-22
 to_remove <- bag_data %>%
-  filter(batch == "2008_J1_CAPT_2n_AR" & site == "BREST" & code_param == "INDVMORNB" & id_ind == "3" &
+  filter(batch == "2008_J1_WILD_2n_AR" & site == "BREST" & code_param == "INDVMORNB" & id_ind == "3" &
     date > "2008-07-22")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
 
-# 2009_J1_CAPT_2n_AR MARSE
+# 2009_J1_WILD_2n_AR MARSE
 bag_data %>%
-  filter(batch == "2009_J1_CAPT_2n_AR" & site == "MARSE" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2009_J1_WILD_2n_AR" & site == "MARSE" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
   mutate(diff_dead_alive = INDVMORNB - INDVVIVNB)
 bag_data %>%
-  filter(batch == "2009_J1_CAPT_2n_AR" & site == "MARSE") %>%
+  filter(batch == "2009_J1_WILD_2n_AR" & site == "MARSE") %>%
   arrange(date) %>%
   View()
 # Several issues here:
@@ -746,22 +746,22 @@ bag_data %>%
 # 300 since at the next visit INDVVNB <100 and INDVMORNB=0 .
 # First, we remove the data at seeding date that are wrong
 to_remove <- bag_data %>%
-  filter(batch == "2009_J1_CAPT_2n_AR" & site == "MARSE" & code_param == "INDVVIVNB" & date == "2009-03-09")
+  filter(batch == "2009_J1_WILD_2n_AR" & site == "MARSE" & code_param == "INDVVIVNB" & date == "2009-03-09")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 # Then we add the correct data for the 9 bags at seeding date (2009-03-09). Since INDVMORNB = 0  at the next visit,
 # INDVMORNB at seeding date is equal to that at the next visit
 to_add <- bag_data %>%
-  filter(batch == "2009_J1_CAPT_2n_AR" & site == "MARSE" & code_param == "INDVVIVNB" & date == "2009-03-20") %>%
+  filter(batch == "2009_J1_WILD_2n_AR" & site == "MARSE" & code_param == "INDVVIVNB" & date == "2009-03-20") %>%
   mutate(date = as.Date("2009-03-09")) %>%
   ungroup()
 bag_data <- rbind(bag_data, to_add)
 rm(to_add)
 
 
-# 2011_J1_CAPT_2n_AR: BLAIN and PENRF
+# 2011_J1_WILD_2n_AR: BLAIN and PENRF
 bag_data %>%
-  filter(batch == "2011_J1_CAPT_2n_AR" & (site == "BLAIN" | site == "PENRF") & code_param != "TOTVIVPOI") %>%
+  filter(batch == "2011_J1_WILD_2n_AR" & (site == "BLAIN" | site == "PENRF") & code_param != "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
@@ -773,13 +773,13 @@ bag_data %>%
 # let's found out the sum of INDVVIVNB + INDMORNB on the minimal date (i.e. date after seeding date).
 max <- bag_data %>%
   group_by(batch, site, id_ind) %>%
-  filter(classe_age == "J1" & campaign == "2011" & (site == "PENRF" | site == "BLAIN") & !code_param == "TOTVIVPOI" &
+  filter(class_age == "J1" & campaign == "2011" & (site == "PENRF" | site == "BLAIN") & !code_param == "TOTVIVPOI" &
     date > "2011-03-17") %>%
   filter(date == min(date)) %>%
   summarize(value = sum(value)) # these will be INDVVIVNB at seeding date
 # Then let's found the row to add and add those informationa
 pipoINDVVIVNB <- bag_data %>%
-  filter(campaign == "2011" & code_param == "INDVVIVNB" & classe_age == "J1" & (site == "PENRF" | site == "BLAIN")) %>%
+  filter(campaign == "2011" & code_param == "INDVVIVNB" & class_age == "J1" & (site == "PENRF" | site == "BLAIN")) %>%
   group_by(batch, site, id_ind) %>%
   mutate(date_min = as.Date("2011-03-17")) %>%
   mutate(date_min_mor = min(date)) %>%
@@ -797,17 +797,17 @@ bag_data <- rbind(bag_data, pipoINDVVIVNB)
 rm(pipoINDVVIVNB, max, target, t, gg)
 
 
-# 2012_J1_CAPT_2n_AR for lots of sites
+# 2012_J1_WILD_2n_AR for lots of sites
 # Same issue as previously the data at seeding date are not indicated
 max <- bag_data %>%
-  filter(classe_age == "J1" & campaign == "2012" & !code_param == "TOTVIVPOI" & !site == "MARSE" &
+  filter(class_age == "J1" & campaign == "2012" & !code_param == "TOTVIVPOI" & !site == "MARSE" &
     date > "2012-02-21") %>%
   group_by(batch, site, id_ind) %>%
   filter(date == min(date)) %>%
   summarize(value = sum(value))
 
 pipoINDVVIVNB <- bag_data %>%
-  filter(campaign == "2012" & classe_age == "J1" & !(site == "MARSE")) %>%
+  filter(campaign == "2012" & class_age == "J1" & !(site == "MARSE")) %>%
   filter(code_param == "INDVVIVNB") %>%
   group_by(batch, site, id_ind) %>%
   mutate(date_min = as.Date("2012-02-21")) %>%
@@ -826,35 +826,35 @@ bag_data <- rbind(bag_data, pipoINDVVIVNB)
 rm(pipoINDVVIVNB, max, t, gg, target)
 
 
-# 2014_J1_CAPT_2n_AR MORLX
+# 2014_J1_WILD_2n_AR MORLX
 bag_data %>%
-  filter(batch == "2014_J1_CAPT_2n_AR" & site == "MORLX" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2014_J1_WILD_2n_AR" & site == "MORLX" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, code_param, date) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
   mutate(diff_mort_viv = INDVMORNB - INDVVIVNB)
 bag_data %>%
-  filter(batch == "2014_J1_CAPT_2n_AR" & site == "MORLX" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2014_J1_WILD_2n_AR" & site == "MORLX" & !code_param == "TOTVIVPOI") %>%
   arrange(date) %>%
   View()
 # On date 2014-05-26, there are 2 bags identified 1, 2 and 3 (a total of 6 bags instead of 3).
 # The bags with value <10 do not fit INDVIVNB and INDVMORNB data. We remove them
 to_remove <- bag_data %>%
-  filter(date == "2014-05-26" & value < 10 & batch == "2014_J1_CAPT_2n_AR" & site == "MORLX")
+  filter(date == "2014-05-26" & value < 10 & batch == "2014_J1_WILD_2n_AR" & site == "MORLX")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 # We also delete the TOTVIVPOI data for this visit as we do not know which one fit the INDVIVNB data
 to_remove <- bag_data %>%
-  filter(date == "2014-05-26" & batch == "2014_J1_CAPT_2n_AR" & site == "MORLX" & code_param == "TOTVIVPOI")
+  filter(date == "2014-05-26" & batch == "2014_J1_WILD_2n_AR" & site == "MORLX" & code_param == "TOTVIVPOI")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2014_J1_CAPT_2n_AR (all sites except MORLX and QUIBE)
+# 2014_J1_WILD_2n_AR (all sites except MORLX and QUIBE)
 # On seeding date, INDVMORNB is indicated for the 3 bags whereas INDVVIVNB is only indicated for bag 1.
 # we add the data for bag 2 and 3.
 to_add <- bag_data %>%
-  filter(campaign == "2014" & code_param == "INDVMORNB" & classe_age == "J1" & date == "2014-03-18" & id_ind != "1") %>%
+  filter(campaign == "2014" & code_param == "INDVMORNB" & class_age == "J1" & date == "2014-03-18" & id_ind != "1") %>%
   mutate(code_param = as.factor("INDVVIVNB"), value = as.numeric("300"))
 bag_data <- rbind(bag_data, to_add)
 rm(to_add)
@@ -862,11 +862,11 @@ rm(to_add)
 
 # Let's see if we solved the issues
 bag_data %>%
-  filter(classe_age == "J1" & !code_param == "TOTVIVPOI") %>%
+  filter(class_age == "J1" & !code_param == "TOTVIVPOI") %>%
   group_by(batch, site, date, code_param) %>%
   summarize(count = n()) %>%
   reshape2::dcast(batch + site + date ~ code_param, value = count) %>%
-  mutate(diff_dead_alive = INDVMORNB - INDVVIVNB, classe_age = substr(batch, 6, 7)) %>%
+  mutate(diff_dead_alive = INDVMORNB - INDVVIVNB, class_age = substr(batch, 6, 7)) %>%
   filter(diff_dead_alive > 0) # No more issues !
 
 
@@ -875,121 +875,121 @@ bag_data %>%
 # popping-up.
 # Let's see if we have this kind of issues for N0 :
 bag_data %>%
-  filter(classe_age == "N0" & code_param == "INDVMORNB") %>%
+  filter(class_age == "N0" & code_param == "INDVMORNB") %>%
   group_by(site, date, campaign) %>%
   summarize(nbr_id_diff = length(unique(id_ind))) %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
-  ggplot(aes(x = date_jj, y = nbr_id_diff)) +
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  ggplot(aes(x = DOY, y = nbr_id_diff)) +
   geom_point() +
   geom_line() +
   facet_grid(site ~ campaign, scales = "free_y") +
   ggtitle("N0 INDVMORNB") # Yes we have those issues.
 
 
-# 2009_N0_CAPT_2n_AR: GEFOS, MORLX and PENRF.
+# 2009_N0_WILD_2n_AR: GEFOS, MORLX and PENRF.
 # There are bag identified 2 and 3 at the seeding date but not after. We delete those:
 to_remove <- bag_data %>%
-  filter(batch == "2009_N0_CAPT_2n_AR" & (site == "MORLX" | site == "PENRF" | site == "GEFOS") &
+  filter(batch == "2009_N0_WILD_2n_AR" & (site == "MORLX" | site == "PENRF" | site == "GEFOS") &
     (id_ind == "2" | id_ind == "3"))
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2009_N0_CAPT_2n_AR: COUPE
+# 2009_N0_WILD_2n_AR: COUPE
 bag_data %>%
-  filter(batch == "2009_N0_CAPT_2n_AR" & site == "COUPE") %>%
+  filter(batch == "2009_N0_WILD_2n_AR" & site == "COUPE") %>%
   arrange(date) %>%
   View()
 # Basg identified id_2 or 3 pop up through the year
 # We delete INDVMORNB for bags 2 and 3 to be able to calculate the mean mass of individuals but not the cumulative
 # mortality
 to_remove <- bag_data %>%
-  filter(batch == "2009_N0_CAPT_2n_AR" & site == "COUPE" & code_param == "INDVMORNB" & id_ind != "1")
+  filter(batch == "2009_N0_WILD_2n_AR" & site == "COUPE" & code_param == "INDVMORNB" & id_ind != "1")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2009_N0_CAPT_2n_AR LOIXR : data are missing on date 2009-06-10 for id_ind = 3
+# 2009_N0_WILD_2n_AR LOIXR : data are missing on date 2009-06-10 for id_ind = 3
 bag_data %>%
-  filter(batch == "2009_N0_CAPT_2n_AR" & site == "LOIXR") %>%
+  filter(batch == "2009_N0_WILD_2n_AR" & site == "LOIXR") %>%
   arrange(date) %>%
   View()
 # We delete all INDVMORNB data related to this bag when date >= 2009-06-10
 to_remove <- bag_data %>%
-  filter(batch == "2009_N0_CAPT_2n_AR" & site == "LOIXR" & id_ind == "3" & code_param == "INDVMORNB" &
+  filter(batch == "2009_N0_WILD_2n_AR" & site == "LOIXR" & id_ind == "3" & code_param == "INDVMORNB" &
     date > "2009-06-10")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2009_N0_CAPT_2n_AR LETES
+# 2009_N0_WILD_2n_AR LETES
 bag_data %>%
-  filter(batch == "2009_N0_CAPT_2n_AR" & site == "LETES") %>%
+  filter(batch == "2009_N0_WILD_2n_AR" & site == "LETES") %>%
   arrange(date) %>%
   View()
 # On date 2009-06-08, there was only one bag followed although bag 2 and 3 were sampled before and after this visit.
 # We remove the INDVMORNB for bag 2 and 3 after date 2009-06-08 to only compute cumulative mortality from bag 1 but
 # mean mass of individuals for all bags.
 to_remove <- bag_data %>%
-  filter(batch == "2009_N0_CAPT_2n_AR" & site == "LETES" & id_ind != "1" & code_param == "INDVMORNB" &
+  filter(batch == "2009_N0_WILD_2n_AR" & site == "LETES" & id_ind != "1" & code_param == "INDVMORNB" &
     date > "2009-06-08")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2010_N0_CAPT_2n_AR BLAIN AND LOIXR
+# 2010_N0_WILD_2n_AR BLAIN AND LOIXR
 bag_data %>%
-  filter(batch == "2010_N0_CAPT_2n_AR" & site == "BLAIN") %>%
+  filter(batch == "2010_N0_WILD_2n_AR" & site == "BLAIN") %>%
   arrange(date) %>%
   View() # On 2010-05-17 and 2010-05-26 only the bag 1 is followed.
 bag_data %>%
-  filter(batch == "2010_N0_CAPT_2n_AR" & site == "LOIXR") %>%
+  filter(batch == "2010_N0_WILD_2n_AR" & site == "LOIXR") %>%
   arrange(date) %>%
   View() # On certain dates, the bag 1 was the only bag followed. 
 # we remove data from bag 2 and 3
 to_remove <- bag_data %>%
-  filter(batch == "2010_N0_CAPT_2n_AR" & (site == "BLAIN" | site == "LOIXR") & id_ind != "1" & code_param == "INDVMORNB")
+  filter(batch == "2010_N0_WILD_2n_AR" & (site == "BLAIN" | site == "LOIXR") & id_ind != "1" & code_param == "INDVMORNB")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2010_N0_CAPT_2n_AR BREST
-# 2011_N0_CAPT_2n_AR BREST
+# 2010_N0_WILD_2n_AR BREST
+# 2011_N0_WILD_2n_AR BREST
 bag_data %>%
-  filter(batch == "2010_N0_CAPT_2n_AR" & site == "BREST" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2010_N0_WILD_2n_AR" & site == "BREST" & !code_param == "TOTVIVPOI") %>%
   arrange(date) %>%
   View() # Only the bag 1 is followed on 2010-05-25
 bag_data %>%
-  filter(batch == "2011_N0_CAPT_2n_AR" & site == "BREST" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2011_N0_WILD_2n_AR" & site == "BREST" & !code_param == "TOTVIVPOI") %>%
   arrange(date) %>%
   View() # Only the bag 1 is followed on 2011-08-12
 # We remove INDVMORNB data for bag 2 and 3 to only calculate cumulative mortality for this bag but calculate mean
 # mass for all 3 bags.
 to_remove <- bag_data %>%
-  filter(batch == "2010_N0_CAPT_2n_AR" & site == "BREST" & id_ind != "1" & code_param == "INDVMORNB" &
+  filter(batch == "2010_N0_WILD_2n_AR" & site == "BREST" & id_ind != "1" & code_param == "INDVMORNB" &
     date > "2010-05-25")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 to_remove <- bag_data %>%
-  filter(batch == "2011_N0_CAPT_2n_AR" & site == "BREST" & id_ind != "1" & code_param == "INDVMORNB" &
+  filter(batch == "2011_N0_WILD_2n_AR" & site == "BREST" & id_ind != "1" & code_param == "INDVMORNB" &
     date > "2011-08-12")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2011_N0_CAPT_2n_AR CANCA COUPE LETES MORLX
+# 2011_N0_WILD_2n_AR CANCA COUPE LETES MORLX
 # Bags 2 and 3 are indicated at seeding date but not followed afterwards. We delete those.
 to_remove <- bag_data %>%
-  filter(batch == "2011_N0_CAPT_2n_AR" &
+  filter(batch == "2011_N0_WILD_2n_AR" &
     (site == "CANCA" | site == "COUPE" | site == "LETES" | site == "MORLX") & id_ind != "1")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2011_N0_CAPT_2n_AR MARSE
+# 2011_N0_WILD_2n_AR MARSE
 bag_data %>%
-  filter(batch == "2011_N0_CAPT_2n_AR" & site == "MARSE" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2011_N0_WILD_2n_AR" & site == "MARSE" & !code_param == "TOTVIVPOI") %>%
   arrange(date) %>%
   View() # id_ind=="3" and id_ind=="4" are not followed after 2011-09-13.
 # not an issue we keep all the data. Cumulative mortality will be the mean of the 4 bags until 2011-09-13 and based on
@@ -998,11 +998,11 @@ bag_data %>%
 
 # Let's see if we solved all the issues
 bag_data %>%
-  filter(classe_age == "N0" & code_param == "INDVMORNB") %>%
+  filter(class_age == "N0" & code_param == "INDVMORNB") %>%
   group_by(site, date, campaign) %>%
   summarize(nbr_id_diff = length(unique(id_ind))) %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
-  ggplot(aes(x = date_jj, y = nbr_id_diff)) +
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  ggplot(aes(x = DOY, y = nbr_id_diff)) +
   geom_point() +
   geom_line() +
   facet_grid(site ~ campaign, scales = "free_y") +
@@ -1013,80 +1013,80 @@ bag_data %>%
 
 # Let's see the issues for J1
 bag_data %>%
-  filter(classe_age == "J1" & code_param == "INDVMORNB") %>%
+  filter(class_age == "J1" & code_param == "INDVMORNB") %>%
   group_by(site, date, campaign) %>%
   summarize(nbr_id_diff = length(unique(id_ind))) %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
-  ggplot(aes(x = date_jj, y = nbr_id_diff)) +
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  ggplot(aes(x = DOY, y = nbr_id_diff)) +
   geom_point() +
   geom_line() +
   facet_grid(site ~ campaign, scales = "free_y") +
   ggtitle("J1 INDVMORNB") # There are a few issues
 
 
-# 2011_J1_CAPT_2n_AR CANCA
+# 2011_J1_WILD_2n_AR CANCA
 bag_data %>%
-  filter(batch == "2011_J1_CAPT_2n_AR" & site == "CANCA" & code_param != "TOTVIVPOI") %>%
+  filter(batch == "2011_J1_WILD_2n_AR" & site == "CANCA" & code_param != "TOTVIVPOI") %>%
   arrange(date) %>%
   View()
 # On date 2011-06-02, the only bag followed is id 3.
 # we remove data from bag 1 and 2 after 2011-06-02.
 to_remove <- bag_data %>%
-  filter(batch == "2011_J1_CAPT_2n_AR" & site == "CANCA" & id_ind != "3" & date > "2011-06-02" & 	
+  filter(batch == "2011_J1_WILD_2n_AR" & site == "CANCA" & id_ind != "3" & date > "2011-06-02" & 	
            code_param=="INDVMORNB")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2012_J1_CAPT_2n_AR CANCA
+# 2012_J1_WILD_2n_AR CANCA
 bag_data %>%
-  filter(batch == "2012_J1_CAPT_2n_AR" & site == "CANCA" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2012_J1_WILD_2n_AR" & site == "CANCA" & !code_param == "TOTVIVPOI") %>%
   arrange(date) %>%
   View()
 # On date 2012-06-21 the only bag followed is id_ind=="1"
 # we delete INDVMORNB id_ind!="1" and date >2012-06-21
 to_remove <- bag_data %>%
-  filter(batch == "2012_J1_CAPT_2n_AR" & site == "CANCA" & code_param == "INDVMORNB" & id_ind != "1" &
+  filter(batch == "2012_J1_WILD_2n_AR" & site == "CANCA" & code_param == "INDVMORNB" & id_ind != "1" &
     date > "2012-06-21")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2013_J1_CAPT_2n_AR LOIXR
+# 2013_J1_WILD_2n_AR LOIXR
 bag_data %>%
-  filter(batch == "2013_J1_CAPT_2n_AR" & site == "LOIXR" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2013_J1_WILD_2n_AR" & site == "LOIXR" & !code_param == "TOTVIVPOI") %>%
   arrange(date) %>%
   View()
 # On date 2013-10-09, the only bag followed is id_ind = 1.
 # We delete INDVMORNB for bag 2 and 3 after 2013-10-09
 to_remove <- bag_data %>%
-  filter(batch == "2013_J1_CAPT_2n_AR" & site == "LOIXR" & code_param == "INDVMORNB" & id_ind != "1" &
+  filter(batch == "2013_J1_WILD_2n_AR" & site == "LOIXR" & code_param == "INDVMORNB" & id_ind != "1" &
     date > "2013-10-09")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
-# 2015_J1_ECLO_2n_E4 CANCA
+# 2015_J1_HATCH_2n_E4 CANCA
 bag_data %>%
-  filter(batch == "2015_J1_ECLO_2n_E4" & site == "CANCA" & !code_param == "TOTVIVPOI") %>%
+  filter(batch == "2015_J1_HATCH_2n_E4" & site == "CANCA" & !code_param == "TOTVIVPOI") %>%
   arrange(date) %>%
   View()
 # On date 2015-07-03 the only bag followed is id_ind=="1" although there are data for other bags before and after that
 # date.
 # We remove INDVMORNB data for id_ind=="2" and id_ind=="3" with date >2015-07-03
 to_remove <- bag_data %>%
-  filter(batch == "2015_J1_ECLO_2n_E4" & site == "CANCA" & id_ind != "1" & code_param == "INDVMORNB" &
+  filter(batch == "2015_J1_HATCH_2n_E4" & site == "CANCA" & id_ind != "1" & code_param == "INDVMORNB" &
     date > "2015-07-03")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 # Let's see if we solved all the issues
 bag_data %>%
-  filter(classe_age == "J1" & code_param == "INDVMORNB") %>%
+  filter(class_age == "J1" & code_param == "INDVMORNB") %>%
   group_by(site, date, campaign) %>%
   summarize(nbr_id_diff = length(unique(id_ind))) %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
-  ggplot(aes(x = date_jj, y = nbr_id_diff)) +
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  ggplot(aes(x = DOY, y = nbr_id_diff)) +
   geom_point() +
   geom_line() +
   facet_grid(site ~ campaign, scales = "free_y") +
@@ -1098,10 +1098,10 @@ bag_data %>%
 # - INDVIVIVNB: the sum of INDVVIVNB and INDVMORNB at the next visit (or INDVVIVNB at the next visit if INDVMORNB = 0)
 # - INDVMORNB: 0 (no death at the seeding date).
 # To know if data are missing, we've read the REMORA, RESCO, ECOSCOPA reportw to find out the seeding date or
-# the number of visit per site and per year. We've also checked the minimal date for other sites or classe_age within
+# the number of visit per site and per year. We've also checked the minimal date for other sites or class_age within
 # the same year.
 
-# Before 2009, there were 4 visits per year. We compute the number of INDVVIVNB data and the minimal date per classe_age 
+# Before 2009, there were 4 visits per year. We compute the number of INDVVIVNB data and the minimal date per class_age 
 # x site x campaign combination (only one bag was followed those years).
 # We only visualize the combinations when the number of data is < 4 but > 2. Indeed, if INDVVIVNB is missing for these 
 # combinations, we could have 4 INDVVIVNB data per year. Later, we will only keep combinations when we have more at least 
@@ -1109,11 +1109,11 @@ bag_data %>%
 # be deleted.
 bag_data %>%
   filter(as.numeric(as.character(campaign)) < "2009" & code_param == "INDVVIVNB") %>%
-  group_by(site, classe_age, campaign) %>%
+  group_by(site, class_age, campaign) %>%
   summarize(count = n(), min_date = min(date)) %>%
-  arrange(campaign, classe_age) %>%
+  arrange(campaign, class_age) %>%
   filter(count < 4 & count >2) # 13 potential issues
-# site  classe_age campaign count min_date
+# site  class_age campaign count min_date
 # MARSE J1         1994         3 1994-02-25
 # AGNAS J1         1996         3 1996-02-22
 # AGNAS N0         1996         3 1996-03-19
@@ -1125,13 +1125,13 @@ bag_data %>%
 
 # LARMO J1 2005
 bag_data %>%
-  filter(campaign == "2005" & code_param == "INDVVIVNB" & classe_age == "J1" & site == "LARMO") %>%
-  group_by(site, classe_age) %>%
+  filter(campaign == "2005" & code_param == "INDVVIVNB" & class_age == "J1" & site == "LARMO") %>%
+  group_by(site, class_age) %>%
   summarize(date = unique(date)) %>%
   arrange(date)
-# The data missing are at the seeding date. The seeding date for the other classe_age (N0) is 2005-04-01.
+# The data missing are at the seeding date. The seeding date for the other class_age (N0) is 2005-04-01.
 to_modify <- bag_data %>%
-  filter(campaign == "2005" & site == "LARMO" & classe_age == "J1" & date == "2005-06-23") 
+  filter(campaign == "2005" & site == "LARMO" & class_age == "J1" & date == "2005-06-23") 
 # 2005-06-23 is the minimal date
 pipoINDVVIVNB <- to_modify %>%
   filter(code_param == "INDVVIVNB") %>%
@@ -1151,14 +1151,14 @@ rm(pipoINDVMORNB, pipoINDVVIVNB, to_modify)
 
 # COUPE N0 2005
 bag_data %>%
-  filter(campaign == "2005" & code_param == "INDVVIVNB" & classe_age == "N0" & site == "COUPE") %>%
-  group_by(site, classe_age) %>%
+  filter(campaign == "2005" & code_param == "INDVVIVNB" & class_age == "N0" & site == "COUPE") %>%
+  group_by(site, class_age) %>%
   summarize(date = unique(date)) %>%
   arrange(date)
 # The data missing is at the seeding date. The seeding date for COUPE J1 is 2005-03-24. Since INDVMORNB = 0 after the 
 # seeding date (2005-03-24), INDVVIVNB at the seeding date = INDVVIVNB at the next visit
 to_add <- bag_data %>%
-  filter(site == "COUPE" & classe_age == "N0" & date == "2005-06-24" & code_param != "TOTVIVPOI") %>%
+  filter(site == "COUPE" & class_age == "N0" & date == "2005-06-24" & code_param != "TOTVIVPOI") %>%
   mutate(date = as.Date("2005-03-24"))
 bag_data <- rbind(bag_data, to_add)
 rm(to_add)
@@ -1171,29 +1171,29 @@ rm(to_add)
 # For year > 2008 we will read the report and add data when necessary
 bag_data %>%
   filter(as.numeric(as.character(campaign)) > "2008" & code_param == "INDVVIVNB") %>%
-  group_by(site, classe_age, campaign) %>%
+  group_by(site, class_age, campaign) %>%
   summarize(count = n(), min_date = min(date)) %>%
-  arrange(campaign, classe_age) %>%
+  arrange(campaign, class_age) %>%
   filter(month(min_date) > 3) %>% # only see combinations when seeding date is after march (which is unusual).
   View() # There might be issues in 2009, 2010, 2011
 
 # 2009
 bag_data %>%
   filter((campaign == "2009") & code_param == "INDVVIVNB") %>%
-  group_by(classe_age, site) %>%
+  group_by(class_age, site) %>%
   summarize(date_min = min(date)) %>%
   View()
 # The info is only missing for N0 and there is already the info for QUIBE and for J1 .
 # Based on the REMORA report the seeding date was 2009-03-09.
 max <- bag_data %>%
-  filter(classe_age == "N0" & campaign == "2009" & !code_param == "TOTVIVPOI" & !site == "QUIBE") %>%
+  filter(class_age == "N0" & campaign == "2009" & !code_param == "TOTVIVPOI" & !site == "QUIBE") %>%
   group_by(batch, site, id_ind) %>%
   filter(date == min(date)) %>%
   summarize(value = sum(value)) # To compute the sum of INDVIVNB and INDVMORND at the second date
 
 to_add <- bag_data %>%
-  filter(campaign == "2009" & classe_age == "N0" & code_param == "INDVMORNB" & site != "QUIBE") %>%
-  group_by(site, classe_age, id_ind) %>%
+  filter(campaign == "2009" & class_age == "N0" & code_param == "INDVMORNB" & site != "QUIBE") %>%
+  group_by(site, class_age, id_ind) %>%
   filter(date == min(date)) %>%
   mutate(date = as.Date("2009-03-09"), value = as.numeric("0")) %>%
   ungroup()
@@ -1201,7 +1201,7 @@ bag_data <- rbind(bag_data, to_add)
 rm(to_add)
 
 pipoINDVVIVNB <- bag_data %>%
-  filter(campaign == "2009" & classe_age == "N0" & code_param == "INDVVIVNB" & site != "QUIBE") %>%
+  filter(campaign == "2009" & class_age == "N0" & code_param == "INDVVIVNB" & site != "QUIBE") %>%
   mutate(date_min = as.Date("2009-03-09")) %>%
   group_by(site, id_ind) %>%
   mutate(date_min_mor = min(date)) %>%
@@ -1222,11 +1222,11 @@ rm(to_add, pipoINDVVIVNB, max, t, gg, target)
 # 2010
 bag_data %>%
   filter((campaign == "2010") & code_param == "INDVVIVNB") %>%
-  group_by(classe_age, site) %>%
+  group_by(class_age, site) %>%
   filter(date == min(date)) %>%
   summarize(min = min(as.Date(date))) %>%
   View()
-# Data are missing for all sites and classe_age.
+# Data are missing for all sites and class_age.
 # According to the report, the seeding date is in week 13 for N0 and 11 for J1.
 # We thus add INDVMORNB= 0 on date 2010-03-29 for N0 and 2010-03-14 for J1
 max <- bag_data %>%
@@ -1239,9 +1239,9 @@ max <- bag_data %>%
 # cumulative mortality = 0 at seeding date so the INDVVIVNB data is of little importance.
 to_add <- bag_data %>%
   filter(campaign == "2010" & code_param == "INDVMORNB") %>%
-  group_by(site, classe_age, id_ind) %>%
+  group_by(site, class_age, id_ind) %>%
   filter(date == min(date)) %>%
-  mutate(date = if_else(classe_age == "N0", as.Date("2010-03-29"), as.Date("2010-03-14")), value = as.numeric("0")) %>%
+  mutate(date = if_else(class_age == "N0", as.Date("2010-03-29"), as.Date("2010-03-14")), value = as.numeric("0")) %>%
   ungroup()
 
 bag_data <- rbind(bag_data, to_add)
@@ -1249,7 +1249,7 @@ rm(to_add)
 
 pipoINDVVIVNB <- bag_data %>%
   filter(campaign == "2010" & code_param == "INDVVIVNB") %>%
-  mutate(date_min = if_else(classe_age == "N0", "2010-03-29", "2010-03-14")) %>%
+  mutate(date_min = if_else(class_age == "N0", "2010-03-29", "2010-03-14")) %>%
   group_by(batch, site, id_ind) %>%
   mutate(date_min_mor = min(date)) %>%
   filter(date == date_min_mor & date_min_mor != date_min) %>%
@@ -1269,11 +1269,11 @@ rm(to_add, pipoINDVVIVNB, max, t, gg, target)
 # 2011
 bag_data %>%
   filter((campaign == "2011") & code_param == "INDVVIVNB") %>%
-  group_by(classe_age, site) %>%
+  group_by(class_age, site) %>%
   filter(date == min(date)) %>%
   summarize(min = min(as.Date(date))) %>%
   View()
-# For classe_age N0, the seeding date is indicated for PENRF on date 2011-03-17.
+# For class_age N0, the seeding date is indicated for PENRF on date 2011-03-17.
 # For clase_age J1, the seeding date is indicated for BLAIN and PENRF on 2011-03-17.
 # The seeding date will be 2011-03-17 for all sites.
 max <- bag_data %>%
@@ -1283,9 +1283,9 @@ max <- bag_data %>%
   summarize(value = sum(value))
 
 to_add <- bag_data %>%
-  filter(campaign == "2011" & code_param == "INDVMORNB" & !(site == "PENRF" & classe_age == "N0") &
-    !((site == "BLAIN" | site == "PENRF") & classe_age == "J1")) %>%
-  group_by(site, classe_age, id_ind) %>%
+  filter(campaign == "2011" & code_param == "INDVMORNB" & !(site == "PENRF" & class_age == "N0") &
+    !((site == "BLAIN" | site == "PENRF") & class_age == "J1")) %>%
+  group_by(site, class_age, id_ind) %>%
   filter(date == min(date)) %>%
   mutate(date = as.Date("2011-03-17"), value = as.numeric("0")) %>%
   ungroup()
@@ -1293,8 +1293,8 @@ bag_data <- rbind(bag_data, to_add)
 rm(to_add)
 
 pipoINDVVIVNB <- bag_data %>%
-  filter(campaign == "2011" & code_param == "INDVVIVNB" & !(site == "PENRF" & classe_age == "N0") &
-    !((site == "BLAIN" | site == "PENRF") & classe_age == "J1")) %>%
+  filter(campaign == "2011" & code_param == "INDVVIVNB" & !(site == "PENRF" & class_age == "N0") &
+    !((site == "BLAIN" | site == "PENRF") & class_age == "J1")) %>%
   mutate(date_min = as.Date("2011-03-17")) %>%
   group_by(batch, site, id_ind) %>%
   mutate(date_min_mor = min(date)) %>%
@@ -1345,8 +1345,8 @@ mass_complet <- bag_data %>%
 mass_complet %>%
   filter(substr(batch, 6, 7) == "N0") %>%
   mutate(campaign = substr(batch, 1, 4)) %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
-  ggplot(aes(x = date_jj, y = mean_mtotg, col = code_param)) +
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  ggplot(aes(x = DOY, y = mean_mtotg, col = code_param)) +
   geom_point(alpha = 0.5) +
   facet_grid(site ~ campaign, scale = "free_y") +
   ggtitle("N0")
@@ -1354,8 +1354,8 @@ mass_complet %>%
 mass_complet %>%
   filter(substr(batch, 6, 7) == "J1") %>%
   mutate(campaign = substr(batch, 1, 4)) %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
-  ggplot(aes(x = date_jj, y = mean_mtotg, col = code_param)) +
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  ggplot(aes(x = DOY, y = mean_mtotg, col = code_param)) +
   geom_point(alpha = 0.5) +
   facet_grid(site ~ campaign, scale = "free_y") +
   ggtitle("J1")
@@ -1378,10 +1378,10 @@ bag_data %>%
   mutate(
     campaign = as.numeric(substr(batch, 1, 4)),
     mean_mass_of_individuals = TOTVIVPOI / INDVVIVNB,
-    date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))
+    DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))
   ) %>%
   filter(substr(batch, 6, 7) == "N0") %>%
-  ggplot(aes(x = date_jj, y = mean_mass_of_individuals, col = id_ind)) +
+  ggplot(aes(x = DOY, y = mean_mass_of_individuals, col = id_ind)) +
   geom_point() +
   geom_line() +
   facet_grid(site ~ campaign, scale = "free_y")
@@ -1429,12 +1429,12 @@ bag_data %>%
   filter((!(is.na(TOTVIVPOI) == TRUE | is.na(INDVVIVNB) == TRUE))) %>%
   mutate(
     individual_mean_mass = TOTVIVPOI / INDVVIVNB,
-    date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))
+    DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))
   ) %>%
   merge(., tab_issues, by = c("batch", "site", "date", "id_ind"), all.x = TRUE) %>%
   mutate(issue = if_else(is.na(issue) == TRUE, paste("no"), paste("yes"))) %>%
   filter(substr(batch, 6, 7) == "N0") %>%
-  ggplot(aes(x = date_jj, y = individual_mean_mass, col = id_ind)) +
+  ggplot(aes(x = DOY, y = individual_mean_mass, col = id_ind)) +
   geom_point(aes(shape = issue, size = issue), alpha = 0.5) +
   geom_line() +
   facet_grid(site ~ campaign, scale = "free_y")
@@ -1442,69 +1442,69 @@ bag_data %>%
 # As we do not know wether these issues come from wrong INDVVIVNB or TOTVIVPOI data, we will check those errors one by
 # one to determine if we need to delete the INDVVIVNB and/or TOTVIVPOI data.
 
-# LOIXR 2011_N0_CAPT_2n_AR
+# LOIXR 2011_N0_WILD_2n_AR
 bag_data %>%
-  filter(batch == "2011_N0_CAPT_2n_AR" & site == "LOIXR") %>%
+  filter(batch == "2011_N0_WILD_2n_AR" & site == "LOIXR") %>%
   arrange(date) %>%
   View()
 # INDVVIVNB and INDVMORNB data are consistent. The issue seems to be on TOTVIVPOI. We thus delete it
 to_remove <- bag_data %>%
-  filter(batch == "2011_N0_CAPT_2n_AR" & site == "LOIXR" & code_param == "TOTVIVPOI" & date == "2011-11-23")
+  filter(batch == "2011_N0_WILD_2n_AR" & site == "LOIXR" & code_param == "TOTVIVPOI" & date == "2011-11-23")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
-# MORLX 2011_N0_CAPT_2n_AR
+# MORLX 2011_N0_WILD_2n_AR
 bag_data %>%
-  filter(batch == "2011_N0_CAPT_2n_AR" & site == "MORLX") %>%
+  filter(batch == "2011_N0_WILD_2n_AR" & site == "MORLX") %>%
   arrange(date) %>%
   View() # INDVVIVNB and INDVMORNB data are inconsistent.
 # On the last visit, INDVVIVNB + INDVMORNB = 172 whereas INDVVIVNB + INDVMORNB = 137 at the previous visit.
 # INDVVIVNB is likely worong, We delete the last visit.
 to_remove <- bag_data %>%
-  filter(batch == "2011_N0_CAPT_2n_AR" & site == "MORLX" & date == "2011-11-23")
+  filter(batch == "2011_N0_WILD_2n_AR" & site == "MORLX" & date == "2011-11-23")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
-# BREST 2011_N0_CAPT_2n_AR
+# BREST 2011_N0_WILD_2n_AR
 bag_data %>%
-  filter(batch == "2011_N0_CAPT_2n_AR" & site == "BREST" & id_ind == "3") %>%
+  filter(batch == "2011_N0_WILD_2n_AR" & site == "BREST" & id_ind == "3") %>%
   arrange(date) %>%
   View() # TOTVIVPOI is inconsistent for id_ind = 3.
 # We delete the last TOTVIVPOI data.
 to_remove <- bag_data %>%
-  filter(batch == "2011_N0_CAPT_2n_AR" & site == "BREST" & id_ind == "3" & date == "2011-11-25" & code_param == "TOTVIVPOI")
+  filter(batch == "2011_N0_WILD_2n_AR" & site == "BREST" & id_ind == "3" & date == "2011-11-25" & code_param == "TOTVIVPOI")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
-# LOIXR 2015_N0_ECLO_2n_E4 id_ind = 2 and 3
+# LOIXR 2015_N0_HATCH_2n_E4 id_ind = 2 and 3
 bag_data %>%
-  filter(batch == "2015_N0_ECLO_2n_E4" & site == "LOIXR" & id_ind != "1") %>%
+  filter(batch == "2015_N0_HATCH_2n_E4" & site == "LOIXR" & id_ind != "1") %>%
   arrange(date) %>%
   View() # For id_ind 3, the issue is probably linked to INDVVIVNB or INDVMORNB, whereas, for id_ind = 2 the issues is
 # on TOTVVIVPOID
 # We delete the last visit for bag 3
 to_remove <- bag_data %>%
-  filter(batch == "2015_N0_ECLO_2n_E4" & site == "LOIXR" & id_ind == "3" & date == "2015-12-14")
+  filter(batch == "2015_N0_HATCH_2n_E4" & site == "LOIXR" & id_ind == "3" & date == "2015-12-14")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 # we delete the last TOTVVIVPOI for bag 2
 to_remove <- bag_data %>%
-  filter(batch == "2015_N0_ECLO_2n_E4" & site == "LOIXR" & id_ind == "2" & date == "2015-12-14" & code_param == "TOTVIVPOI")
+  filter(batch == "2015_N0_HATCH_2n_E4" & site == "LOIXR" & id_ind == "2" & date == "2015-12-14" & code_param == "TOTVIVPOI")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
-# AGNAS 2017_N0_ECLO_2n_E4 and 2018_N0_ECLO_2n_E4 id_ind = 1
+# AGNAS 2017_N0_HATCH_2n_E4 and 2018_N0_HATCH_2n_E4 id_ind = 1
 bag_data %>%
-  filter(batch == "2017_N0_ECLO_2n_E4" & site == "AGNAS" & id_ind == "1") %>%
+  filter(batch == "2017_N0_HATCH_2n_E4" & site == "AGNAS" & id_ind == "1") %>%
   arrange(date) %>%
   View()
 bag_data %>%
-  filter(batch == "2018_N0_ECLO_2n_E4" & site == "AGNAS" & id_ind == "1") %>%
+  filter(batch == "2018_N0_HATCH_2n_E4" & site == "AGNAS" & id_ind == "1") %>%
   arrange(date) %>%
   View()
 # For both years, the issues is on TOTVIVPOI. We delete the last TOTVIVPOI data.
 to_remove <- bag_data %>%
-  filter((batch == "2017_N0_ECLO_2n_E4" | batch == "2018_N0_ECLO_2n_E4") & site == "AGNAS" & id_ind == "1" &
+  filter((batch == "2017_N0_HATCH_2n_E4" | batch == "2018_N0_HATCH_2n_E4") & site == "AGNAS" & id_ind == "1" &
     (date == "2017-12-04" | date == "2018-12-07") & code_param == "TOTVIVPOI")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
@@ -1517,12 +1517,12 @@ rm(to_remove)
 # LOIXR in 2009. Indeed, there is an aberrant mass data on date 2009-08-24.
 # The 3 bags are really heavy on that date but they are almost twice lighter at the next visit even though INDVMORNB = 0
 bag_data %>%
-  filter(batch == "2009_N0_CAPT_2n_AR" & site == "LOIXR" & date > "2009-07-22" & date < "2009-09-21") %>%
+  filter(batch == "2009_N0_WILD_2n_AR" & site == "LOIXR" & date > "2009-07-22" & date < "2009-09-21") %>%
   arrange(date) %>%
   View()
 # We remove TOTVIVPOI data on date 2009-08-24
 to_remove <- bag_data %>%
-  filter(batch == "2009_N0_CAPT_2n_AR" & site == "LOIXR" & date == "2009-08-24" & code_param == "TOTVIVPOI")
+  filter(batch == "2009_N0_WILD_2n_AR" & site == "LOIXR" & date == "2009-08-24" & code_param == "TOTVIVPOI")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove,last_mass, second_last_mass)
 
@@ -1533,12 +1533,12 @@ bag_data %>%
   filter((!(is.na(TOTVIVPOI) == TRUE | is.na(INDVVIVNB) == TRUE))) %>%
   mutate(
     individual_mean_mass = TOTVIVPOI / INDVVIVNB,
-    date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))
+    DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))
   ) %>%
   merge(., tab_issues, by = c("batch", "site", "date", "id_ind"), all.x = TRUE) %>%
   mutate(issue = if_else(is.na(issue) == TRUE, paste("no"), paste("yes"))) %>%
   filter(substr(batch, 6, 7) == "J1") %>%
-  ggplot(aes(x = date_jj, y = individual_mean_mass, col = id_ind)) +
+  ggplot(aes(x = DOY, y = individual_mean_mass, col = id_ind)) +
   geom_point(aes(shape = issue, size = issue), alpha = 0.5) +
   geom_line() +
   facet_grid(site ~ campaign, scale = "free_y") # doing this plot we have a warning message "Removed 2 rows containing 
@@ -1553,7 +1553,7 @@ bag_data %>%
 # There is a sharp decrease in the mean mass of individuals in August and September. Let's compare the trend in mean 
 # mass of individuals and the mean of individual mass.
 Coupe_2009_bag_data <- bag_data %>%
-  filter(classe_age == "J1" & site == "COUPE" & campaign == "2009") %>%
+  filter(class_age == "J1" & site == "COUPE" & campaign == "2009") %>%
   reshape2::dcast(batch + site + date + id_ind + campaign ~ code_param, value.var = "value") %>%
   filter((!(is.na(TOTVIVPOI) == TRUE | is.na(INDVVIVNB) == TRUE))) %>%
   mutate(individual_mean_mass = TOTVIVPOI / INDVVIVNB) %>%
@@ -1566,7 +1566,7 @@ Coupe_2009_bag_data <- bag_data %>%
   ylab("mean mass of individuals")
 
 Coupe_2009_individual_data <- TAB %>%
-  filter(classe_age == "J1" & site == "COUPE" & campaign == "2009" & code_param == "INDVPOID" &
+  filter(class_age == "J1" & site == "COUPE" & campaign == "2009" & code_param == "INDVPOID" &
     fraction == "Sans objet" & method == "Pesée simple sans préparation") %>%
   group_by(date) %>%
   summarize(mean_mass = mean(value)) %>%
@@ -1585,20 +1585,20 @@ rm(Coupe_2009_bag_data, Coupe_2009_individual_data)
 # there is a mistake on TOTVIVPOI.
 # we delete the mass for all bags on date 2009-09-17 and 2009-08-18.
 to_remove <- bag_data %>%
-  filter(site == "COUPE" & classe_age == "J1" & code_param == "TOTVIVPOI" & (date == "2009-08-18" | date == "2009-09-17"))
+  filter(site == "COUPE" & class_age == "J1" & code_param == "TOTVIVPOI" & (date == "2009-08-18" | date == "2009-09-17"))
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 # GEFOS 2010 :
 bag_data %>%
-  filter(batch == "2010_J1_CAPT_2n_AR" & site == "GEFOS") %>%
+  filter(batch == "2010_J1_WILD_2n_AR" & site == "GEFOS") %>%
   arrange(date) %>%
   View()
 # On date 2010-07-12, mass for id_ind = 2 is 1050g, whereas, mass before and after is around 10000g.
 # I've checked the field sheet and TOTVIVPOI should be 5.42 kg + 5.08 kg, hence 10500 g. A "0" is missing.
 # We correct that.
 to_remove <- bag_data %>%
-  filter(batch == "2010_J1_CAPT_2n_AR" & site == "GEFOS" & date == "2010-07-12" & code_param == "TOTVIVPOI" &
+  filter(batch == "2010_J1_WILD_2n_AR" & site == "GEFOS" & date == "2010-07-12" & code_param == "TOTVIVPOI" &
     id_ind == "2")
 bag_data <- anti_join(bag_data, to_remove)
 # we add the row with the good information
@@ -1609,7 +1609,7 @@ rm(to_remove, to_add)
 
 # MARSE 2012 :
 bag_data %>%
-  filter(batch == "2012_J1_CAPT_2n_AR" & site == "MARSE") %>%
+  filter(batch == "2012_J1_WILD_2n_AR" & site == "MARSE") %>%
   arrange(date) %>%
   View()
 # For id_ind = 6: on date 2012-06-04, INDVVIVNB = 13 and INDVMORNB = 3.
@@ -1618,13 +1618,13 @@ bag_data %>%
 # For bag 4 the issue is the same. INDVVIVNB = 16  and INDVMORNB = 0. However on the previous visit and the next one
 # INDVVIVNB is around 40.
 to_remove <- bag_data %>%
-  filter(batch == "2012_J1_CAPT_2n_AR" & site == "MARSE" & date > "2012-05-21" & code_param == "INDVMORNB" &
+  filter(batch == "2012_J1_WILD_2n_AR" & site == "MARSE" & date > "2012-05-21" & code_param == "INDVMORNB" &
     (id_ind == "4" | id_ind == "6"))
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 # We remove INDVVIVNB for that date.
 to_remove <- bag_data %>%
-  filter(batch == "2012_J1_CAPT_2n_AR" & site == "MARSE" & date == "2012-06-04" & code_param == "INDVVIVNB" &
+  filter(batch == "2012_J1_WILD_2n_AR" & site == "MARSE" & date == "2012-06-04" & code_param == "INDVVIVNB" &
     (id_ind == "4" | id_ind == "6"))
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
@@ -1633,27 +1633,27 @@ rm(to_remove)
 
 # MORLX 2014 : id_ind = 3
 bag_data %>%
-  filter(batch == "2014_J1_CAPT_2n_AR" & site == "MORLX" & id_ind == "3") %>%
+  filter(batch == "2014_J1_WILD_2n_AR" & site == "MORLX" & id_ind == "3") %>%
   arrange(date) %>%
   View()
 # on the last visit INDVVIVNB = 163, whereas at the previous visit INDVVIVNB + INDVMORNB = 105. This is very
 # inconsistent and we remove the last visit for bag 3.
 to_remove <- bag_data %>%
-  filter(batch == "2014_J1_CAPT_2n_AR" & site == "MORLX" & date == "2014-12-08" & id_ind == "3")
+  filter(batch == "2014_J1_WILD_2n_AR" & site == "MORLX" & date == "2014-12-08" & id_ind == "3")
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
 
 
 # BLAIN 2016 : id_ind =2
 bag_data %>%
-  filter(batch == "2016_J1_ECLO_2n_E4" & site == "BLAIN" & id_ind=="2") %>%
+  filter(batch == "2016_J1_HATCH_2n_E4" & site == "BLAIN" & id_ind=="2") %>%
   arrange(date) %>%
   View()
 # On date 2016-11-18 INDVVIVNB = 238 but later on 2016-12-01 INDVVIVNB = 328. There is a mistake on INDVVIVNB.
 # It should have been 238 (because INDVMORNB = 0).
 # we remove the wrong INDVVIVNB and add the good one.
 to_remove <- bag_data %>%
-  filter(batch == "2016_J1_ECLO_2n_E4" & site == "BLAIN" & date == "2016-12-01" & id_ind == "2" &
+  filter(batch == "2016_J1_HATCH_2n_E4" & site == "BLAIN" & date == "2016-12-01" & id_ind == "2" &
     code_param == "INDVVIVNB")
 bag_data <- anti_join(bag_data, to_remove)
 to_add <- to_remove %>%
@@ -1667,12 +1667,12 @@ bag_data %>%
   filter((!(is.na(TOTVIVPOI) == TRUE | is.na(INDVVIVNB) == TRUE))) %>%
   mutate(
     individual_mean_mass = TOTVIVPOI / INDVVIVNB,
-    date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))
+    DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))
   ) %>%
   merge(., tab_issues, by = c("batch", "site", "date", "id_ind"), all.x = TRUE) %>%
   mutate(issue = if_else(is.na(issue) == TRUE, paste("no"), paste("yes"))) %>%
   filter(substr(batch, 6, 7) == "J1") %>%
-  ggplot(aes(x = date_jj, y = individual_mean_mass, col = id_ind)) +
+  ggplot(aes(x = DOY, y = individual_mean_mass, col = id_ind)) +
   geom_point(aes(shape = issue, size = issue), alpha = 0.5) +
   geom_line() +
   facet_grid(site ~ campaign, scale = "free_y")
@@ -1716,16 +1716,16 @@ mass_final %>%
     cols = c(mean_of_individual_mass, avg_mean_mass_of_individuals), names_to = "variables",
     values_to = "mesures"
   ) %>%
-  mutate(classe_age = as.factor(substr(batch, 6, 7))) %>%
+  mutate(class_age = as.factor(substr(batch, 6, 7))) %>%
   mutate(campaign = as.factor(substr(batch, 1, 4))) %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
-  filter(classe_age == "N0") %>%
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  filter(class_age == "N0") %>%
   ggplot() +
-  geom_point(aes(y = mesures, x = date_jj, col = variables, shape = variables), alpha = 0.5, size = 2) +
+  geom_point(aes(y = mesures, x = DOY, col = variables, shape = variables), alpha = 0.5, size = 2) +
   facet_grid(site ~ campaign, scales = "free_y") +
   theme(legend.position = "bottom")
 
-# In 2009,2010 and 2011 we do not have TOTVVIVPOI at seeding date (the same is true for classe_age = J1).
+# In 2009,2010 and 2011 we do not have TOTVVIVPOI at seeding date (the same is true for class_age = J1).
 # To be consistent, we keep the data taken at the individual level at seeding date for all year x combination,
 # whether or not we had one at the bag level.
 mass_final <- mass_final %>%
@@ -1734,7 +1734,7 @@ mass_final <- mass_final %>%
   )) %>%
   select(-avg_mean_mass_of_individuals, -mean_of_individual_mass)
 
-# We only keep site x year combination x classe_age for which we have at least 4 data a year:
+# We only keep site x year combination x class_age for which we have at least 4 data a year:
 to_remove <- mass_final %>%
   group_by(batch, site) %>%
   summarise(n_count = n()) %>%
@@ -1757,9 +1757,9 @@ mass_final %>%
   filter(keep == "no") %>%
   ungroup() %>%
   group_by(batch, site, date) %>%
-  mutate(campaign = as.numeric(substr(batch, 1, 4)), classe_age = substr(batch, 6, 7)) %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
-  ggplot(aes(x = date_jj, y = mean_mass, col = classe_age)) +
+  mutate(campaign = as.numeric(substr(batch, 1, 4)), class_age = substr(batch, 6, 7)) %>%
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  ggplot(aes(x = DOY, y = mean_mass, col = class_age)) +
   geom_point() +
   geom_line() +
   facet_grid(site ~ campaign) +
@@ -1775,9 +1775,9 @@ mass_final <- mass_final %>%
 # graphics
 mass_final %>%
   mutate(campaign = substr(batch, 1, 4)) %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
-  mutate(classe_age = substr(batch, 6, 7)) %>%
-  ggplot(aes(x = date_jj, y = mean_mass, col = classe_age)) +
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  mutate(class_age = substr(batch, 6, 7)) %>%
+  ggplot(aes(x = DOY, y = mean_mass, col = class_age)) +
   geom_point() +
   geom_line() +
   facet_grid(site ~ campaign) +
@@ -1790,8 +1790,8 @@ mass_final %>%
 # can't calculate a cumulative mortality. Indeed, the instantaneous mortality (INDVMORNB / (INDVVIVNB + INDVMORNB)) can't 
 # be calculated (0/0 + 0 does not exists).
 to_remove <- bag_data %>%
-  filter(site == "MARSE" & ( (batch == "2011_J1_CAPT_2n_AR" & id_ind == "1" & (date == "2011-09-26" | date == "2011-09-13"))
-                              | (batch == "2009_J1_CAPT_2n_AR" & id_ind==5 & date=="2009-06-23")))
+  filter(site == "MARSE" & ( (batch == "2011_J1_WILD_2n_AR" & id_ind == "1" & (date == "2011-09-26" | date == "2011-09-13"))
+                              | (batch == "2009_J1_WILD_2n_AR" & id_ind==5 & date=="2009-06-23")))
 
 bag_data <- anti_join(bag_data, to_remove)
 rm(to_remove)
@@ -1855,18 +1855,18 @@ morta2$id_ind <- as.factor(morta2$id_ind)
 
 # We first see if there are odd cumulative mortality when we followed several bags (after 2008)
 morta2 %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
   filter(substr(batch, 6, 7) == "N0" & campaign > 2008) %>%
-  ggplot(aes(x = date_jj, y = MC, col = id_ind)) +
+  ggplot(aes(x = DOY, y = MC, col = id_ind)) +
   geom_point() +
   geom_line() +
   facet_grid(site ~ campaign, scales = "free_y") +
   ggtitle("N0") # Nothing suspicious
 
 morta2 %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
   filter(substr(batch, 6, 7) == "J1" & campaign > 2008) %>%
-  ggplot(aes(x = date_jj, y = MC, col = id_ind)) +
+  ggplot(aes(x = DOY, y = MC, col = id_ind)) +
   geom_point() +
   geom_line() +
   facet_grid(site ~ campaign, scales = "free_y") +
@@ -1894,14 +1894,14 @@ rm(morta2)
 # periods
 # Lets see the data for which data acquisition ended before October
 morta_final %>%
-  mutate(classe_age = as.factor(substr(batch, 6, 7))) %>%
+  mutate(class_age = as.factor(substr(batch, 6, 7))) %>%
   mutate(campaign = as.factor(substr(batch, 1, 4))) %>%
   group_by(batch, site) %>%
   mutate(keep = ifelse(substr(max(date), 6, 7) >= 10, "yes", "no")) %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
   filter(keep == "no") %>%
   ungroup() %>%
-  ggplot(aes(x = date_jj, y = mean_CM, col = classe_age)) +
+  ggplot(aes(x = DOY, y = mean_CM, col = class_age)) +
   geom_point() +
   geom_line() +
   facet_grid(site ~ campaign) +
@@ -1916,9 +1916,9 @@ morta_final <- morta_final %>%
 
 morta_final %>%
   mutate(campaign = substr(batch, 1, 4)) %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
-  mutate(classe_age = substr(batch, 6, 7)) %>%
-  ggplot(aes(x = date_jj, y = mean_CM, col = classe_age)) +
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d"))) %>%
+  mutate(class_age = substr(batch, 6, 7)) %>%
+  ggplot(aes(x = DOY, y = mean_CM, col = class_age)) +
   geom_point() +
   geom_line() +
   facet_grid(site ~ campaign) +
@@ -1931,9 +1931,9 @@ morta_mass_complet <- merge(morta_final, mass_final, by = c("batch", "site", "da
 rm(mass_final, morta_final)
 
 morta_mass_complet <- morta_mass_complet %>%
-  mutate(classe_age = as.factor(substr(batch, 6, 7))) %>%
+  mutate(class_age = as.factor(substr(batch, 6, 7))) %>%
   mutate(campaign = as.factor(substr(batch, 1, 4))) %>%
-  mutate(date_jj = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d")))
+  mutate(DOY = julian(date) - julian(as.Date(paste(campaign, "/01/01", sep = ""), format = "%Y/%m/%d")))
 
 morta_mass_complet$mean_CM <- formattable(morta_mass_complet$mean_CM, digits = 3, format = "f")
 morta_mass_complet$mean_mass <- formattable(morta_mass_complet$mean_mass, digits = 2, format = "f")
@@ -1942,7 +1942,7 @@ morta_mass_complet$mean_mass <- formattable(morta_mass_complet$mean_mass, digits
 morta_mass_complet %>%
   select(-mean_mass) %>%
   drop_na() %>%
-  ggplot(aes(x = date_jj, y = mean_CM, col = classe_age, group = classe_age)) +
+  ggplot(aes(x = DOY, y = mean_CM, col = class_age, group = class_age)) +
   geom_line() +
   geom_point() +
   scale_x_continuous(breaks = seq(0, 365, by = 100), limits = c(0, 365)) +
@@ -1951,7 +1951,7 @@ morta_mass_complet %>%
 morta_mass_complet %>%
   select(-mean_CM) %>%
   drop_na() %>%
-  ggplot(aes(x = date_jj, y = mean_mass, col = classe_age, group = classe_age)) +
+  ggplot(aes(x = DOY, y = mean_mass, col = class_age, group = class_age)) +
   geom_line() +
   geom_point() +
   scale_x_continuous(breaks = seq(0, 365, by = 100), limits = c(0, 365)) +

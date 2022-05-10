@@ -1,14 +1,14 @@
-"num","site","name","zone_fr","zone_en","lat","long"
-1,"GEFOS","Géfosse","Baie de Seine","Bay of Seine","49.38915","-1.099767"
-2,"BLAIN","Blainville-sur-mer","Cotentin Ouest","West Cotentin Peninsula coast","49.06578","-1.62995"
-3,"CANCA","Cancale","Baix du Mont Saint-Michel","Bay of Mont Saint-Michel","48.66098","-1.841353"
-4,"MORLX","Morlaix","Baie de Morlaix","Bay of Morlaix","48.66234","-3.895002"
-5,"BREST","Pointe du Château","Rade de Brest","Bay of Brest","48.335","-4.31939"
-6,"QUIBE","Men-er-Roué","Baie de Quiberon","Bay of Quiberon","47.53816","-3.093013"
-7,"LARMO","Larmor-Baden","Golfe du Morbihan","Morbihan Gulf","47.58846","-2.885802"
-8,"PENRF","Pénerf","Ria de Pénerf","Pénerf River","47.51011","-2.648004"
-9,"COUPE","Coupelasse","Baie de Bourgneuf","Bay of Bourgneuf","47.02602","-2.030078"
-10,"LOIXR","Loix-en-Ré","Pertuis breton","Pertuis Breton/Ré Island","46.22507","-1.404059"
-11,"AGNAS","Banc d'Agnas","Pertuis d'Antioche","Pertuis d’Antioche/Bay of Marennes-Oléron ","45.86854","-1.172305"
-12,"LETES","Le Tès","Bassin d'Arcachon","Bay of Arcachon","44.66595","-1.138744"
-13,"MARSE","Marseillan","Etang de Thau","Thau Lagoon","43.37913","3.57108"
+num,site,name,zone_fr,zone_en,lat,long
+1,GEFOS,Géfosse,Baie de Seine,Bay of Seine,49.38915,-1.099767
+2,BLAIN,Blainville-sur-mer,Cotentin Ouest,West Cotentin Peninsula coast,49.06578,-1.62995
+3,CANCA,Cancale,Baix du Mont Saint-Michel,Bay of Mont Saint-Michel,48.66098,-1.841353
+4,MORLX,Morlaix,Baie de Morlaix,Bay of Morlaix,48.66234,-3.895002
+5,BREST,Pointe du Château,Rade de Brest,Bay of Brest,48.335,-4.31939
+6,QUIBE,Men-er-Roué,Baie de Quiberon,Bay of Quiberon,47.53816,-3.093013
+7,LARMO,Larmor-Baden,Golfe du Morbihan,Morbihan Gulf,47.58846,-2.885802
+8,PENRF,Pénerf,Ria de Pénerf,Pénerf River,47.51011,-2.648004
+9,COUPE,Coupelasse,Baie de Bourgneuf,Bay of Bourgneuf,47.02602,-2.030078
+10,LOIXR,Loix-en-Ré,Pertuis breton,Pertuis Breton/Ré Island,46.22507,-1.404059
+11,AGNAS,Banc d'Agnas,Pertuis d'Antioche,Pertuis d’Antioche/Bay of Marennes-Oléron ,45.86854,-1.172305
+12,LETES,Le Tès,Bassin d'Arcachon,Bay of Arcachon,44.66595,-1.138744
+13,MARSE,Marseillan,Etang de Thau,Thau Lagoon,43.37913,3.57108
